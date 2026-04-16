@@ -1,0 +1,1446 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, user-scalable=no"
+    />
+    <title>HAR 代码生成器</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link
+      href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Inter:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      body {
+        font-family: "Inter", sans-serif;
+        background: #0f172a;
+        color: #e2e8f0;
+        height: 100vh;
+        overflow: hidden;
+      }
+      .mono {
+        font-family: "JetBrains Mono", monospace;
+      }
+      .drop-zone {
+        background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+        border: 2px dashed #3b82f6;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      }
+      .drop-zone.dragover {
+        border-color: #60a5fa;
+        background: linear-gradient(135deg, #1e293b 0%, #172554 100%);
+        transform: scale(1.02);
+        box-shadow: 0 0 40px rgba(59, 130, 246, 0.3);
+      }
+      .entry-card {
+        background: rgba(30, 41, 59, 0.8);
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(59, 130, 246, 0.2);
+        transition: all 0.3s ease;
+      }
+      .entry-card:hover {
+        border-color: rgba(59, 130, 246, 0.5);
+        transform: translateX(4px);
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+      }
+      .entry-card.active {
+        border-color: #3b82f6;
+        background: rgba(59, 130, 246, 0.1);
+      }
+      .method-badge {
+        font-size: 0.65rem;
+        font-weight: 700;
+        letter-spacing: 0.05em;
+      }
+      .code-block {
+        background: #0d1117;
+        border: 1px solid #30363d;
+        border-radius: 12px;
+        position: relative;
+        overflow: hidden;
+      }
+      .code-header {
+        background: #161b22;
+        border-bottom: 1px solid #30363d;
+        padding: 12px 16px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+      .code-dot {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+      }
+      .syntax-keyword {
+        color: #ff7b72;
+      }
+      .syntax-string {
+        color: #a5d6ff;
+      }
+      .syntax-function {
+        color: #d2a8ff;
+      }
+      .syntax-comment {
+        color: #8b949e;
+      }
+      .syntax-number {
+        color: #79c0ff;
+      }
+      .sidebar {
+        transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        overflow: hidden;
+      }
+      .sidebar.collapsed {
+        width: 60px !important;
+        min-width: 60px !important;
+      }
+      .sidebar.collapsed .sidebar-content {
+        opacity: 0;
+        pointer-events: none;
+      }
+      .sidebar-toggle {
+        transition: transform 0.3s ease;
+      }
+      .sidebar.collapsed .sidebar-toggle {
+        transform: rotate(180deg);
+      }
+      .code-scroll {
+        overflow-x: auto;
+        white-space: pre;
+      }
+      .code-scroll::-webkit-scrollbar {
+        height: 8px;
+      }
+      .code-scroll::-webkit-scrollbar-track {
+        background: #0d1117;
+      }
+      .code-scroll::-webkit-scrollbar-thumb {
+        background: #30363d;
+        border-radius: 4px;
+      }
+      .result-panel {
+        background: #0a0c10;
+        border-top: 1px solid #1f2937;
+        transition: all 0.2s ease;
+      }
+      .exec-btn:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+      .group:hover .group-hover\:opacity-100 {
+        opacity: 1;
+      }
+      .result-pre {
+        white-space: pre-wrap;
+        word-break: break-word;
+        font-family: "JetBrains Mono", monospace;
+        font-size: 0.75rem;
+        line-height: 1.4;
+      }
+      /* 模态框滚动修复 */
+      .modal-content-scroll {
+        flex: 1;
+        overflow-y: auto;
+        min-height: 0;
+      }
+      .modal-tab-content {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+      }
+      .modal-tab-content .code-block {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+      }
+      .modal-tab-content .code-scroll {
+        flex: 1;
+        overflow-y: auto;
+      }
+    </style>
+  </head>
+  <body class="h-screen overflow-hidden">
+    <div class="flex h-full">
+      <!-- 左侧栏 -->
+      <div
+        id="sidebar"
+        class="sidebar w-1/3 min-w-[400px] flex flex-col border-r border-slate-700 bg-slate-900/50 relative"
+      >
+        <button
+          id="toggleSidebar"
+          class="sidebar-toggle absolute right-2 top-1/2 -translate-y-1/2 z-20 w-8 h-8 rounded-full bg-slate-700 hover:bg-slate-600 flex items-center justify-center text-slate-300 transition-all"
+        >
+          <svg
+            class="w-5 h-5"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M11 19l-7-7 7-7m8 14l-7-7 7-7"
+            />
+          </svg>
+        </button>
+        <div class="sidebar-content h-full flex flex-col">
+          <div class="p-6 border-b border-slate-700">
+            <div class="flex items-center gap-3 mb-2">
+              <div
+                class="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shadow-lg shadow-blue-500/20"
+              >
+                <svg
+                  class="w-6 h-6 text-white"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
+                  />
+                </svg>
+              </div>
+              <div>
+                <h1
+                  class="text-xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent"
+                >
+                  HAR Converter
+                </h1>
+                <p class="text-xs text-slate-400">持久化存储 · 一键执行Fetch</p>
+              </div>
+            </div>
+          </div>
+          <div class="p-6">
+            <div
+              id="dropZone"
+              class="drop-zone rounded-2xl p-8 text-center cursor-pointer relative overflow-hidden"
+            >
+              <input type="file" id="fileInput" accept=".har" class="hidden" />
+              <div class="relative z-10">
+                <div
+                  class="w-16 h-16 mx-auto mb-4 rounded-2xl bg-blue-500/10 flex items-center justify-center"
+                >
+                  <svg
+                    class="w-8 h-8 text-blue-400"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                      d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
+                    />
+                  </svg>
+                </div>
+                <p class="text-lg font-medium text-slate-200 mb-2">
+                  拖入 HAR 文件到这里
+                </p>
+                <p class="text-sm text-slate-400">
+                  或点击选择文件 · 自动保存至本地
+                </p>
+              </div>
+            </div>
+          </div>
+          <div class="flex-1 overflow-hidden flex flex-col">
+            <div
+              class="px-6 py-3 border-b border-slate-700 flex items-center justify-between bg-slate-800/50"
+            >
+              <span class="text-sm font-medium text-slate-300">请求列表</span>
+              <div class="flex items-center gap-2 mr-10">
+                <button
+                  id="clearAllBtn"
+                  onclick="window.clearAllEntries()"
+                  class="hidden text-xs px-2 py-1 rounded bg-red-500/20 text-red-400 hover:bg-red-500/30 transition-all flex items-center gap-1"
+                >
+                  <svg
+                    class="w-3 h-3"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                      d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                    /></svg
+                  >清空</button
+                ><span
+                  id="entryCount"
+                  class="text-xs px-2 py-1 rounded-full bg-slate-700 text-slate-300 hidden"
+                  >0</span
+                >
+              </div>
+            </div>
+            <div
+              id="entryList"
+              class="flex-1 overflow-y-auto scroll-hide p-4 space-y-2"
+            >
+              <div class="text-center text-slate-500 py-12">
+                <svg
+                  class="w-12 h-12 mx-auto mb-3 opacity-50"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="1.5"
+                    d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                  />
+                </svg>
+                <p class="text-sm">暂无数据，上传 .har 文件</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 右侧区域 -->
+      <div class="flex-1 flex flex-col bg-slate-950 min-w-0">
+        <div
+          class="h-16 border-b border-slate-800 flex items-center justify-between px-6 bg-slate-900/50 backdrop-blur-sm"
+        >
+          <!-- 仅保留 Fetch 选项卡 -->
+          <div class="flex items-center gap-1 bg-slate-800/50 rounded-lg p-1">
+            <button
+              class="tab-btn active px-4 py-2 rounded-md text-sm font-medium text-slate-200 hover:bg-slate-700/50 transition-all"
+              data-format="fetch"
+            >
+              Fetch
+            </button>
+          </div>
+          <div class="flex items-center gap-2">
+            <button
+              id="copyCurrent"
+              class="hidden px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-white text-sm font-medium transition-all flex items-center gap-2"
+            >
+              <svg
+                class="w-4 h-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+                /></svg
+              >复制当前</button
+            ><button
+              id="downloadAll"
+              class="hidden px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium transition-all flex items-center gap-2 shadow-lg shadow-blue-600/20"
+            >
+              <svg
+                class="w-4 h-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
+                /></svg
+              >全部下载
+            </button>
+          </div>
+        </div>
+
+        <div class="flex-1 overflow-hidden relative flex flex-col">
+          <div
+            id="emptyState"
+            class="absolute inset-0 flex items-center justify-center"
+          >
+            <div class="text-center">
+              <div
+                class="w-24 h-24 mx-auto mb-6 rounded-3xl bg-gradient-to-br from-slate-800 to-slate-900 flex items-center justify-center shadow-2xl"
+              >
+                <svg
+                  class="w-12 h-12 text-slate-600"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="1.5"
+                    d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"
+                  />
+                </svg>
+              </div>
+              <p class="text-slate-500 text-lg">选择左侧请求查看生成的代码</p>
+            </div>
+          </div>
+          <div id="codeContainer" class="hidden h-full flex flex-col">
+            <div class="px-6 py-4 border-b border-slate-800 bg-slate-900/30">
+              <div class="flex items-center gap-3 mb-2">
+                <span
+                  id="currentMethod"
+                  class="method-badge px-2 py-1 rounded bg-blue-500/20 text-blue-400"
+                  >GET</span
+                >
+                <div class="flex-1 min-w-0 flex items-center gap-2">
+                  <span
+                    id="currentUrl"
+                    class="text-sm text-slate-300 mono truncate block"
+                    title=""
+                    >https://api.example.com</span
+                  ><button
+                    id="copyCurrentUrlBtn"
+                    class="flex-shrink-0 px-2 py-1 rounded bg-slate-700 hover:bg-slate-600 text-slate-300 text-xs transition-all flex items-center gap-1"
+                    title="复制完整URL"
+                  >
+                    <svg
+                      class="w-3 h-3"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+                      /></svg
+                    >复制
+                  </button>
+                </div>
+              </div>
+              <div class="flex items-center gap-4 text-xs text-slate-500">
+                <span id="currentStatus">Status: 200</span
+                ><span id="currentTime">Time: 234ms</span
+                ><span id="currentSize">Size: 1.2KB</span>
+              </div>
+            </div>
+            <div
+              class="flex-1 overflow-auto scroll-hide"
+              style="display: flex; flex-direction: column"
+            >
+              <div class="p-6 pb-2">
+                <div class="code-block flex-1 flex flex-col min-h-0">
+                  <div class="code-header flex-shrink-0">
+                    <div class="flex items-center gap-2">
+                      <div class="code-dot bg-red-500"></div>
+                      <div class="code-dot bg-yellow-500"></div>
+                      <div class="code-dot bg-green-500"></div>
+                      <span
+                        id="codeFilename"
+                        class="ml-2 text-xs text-slate-400 mono"
+                        >request.js</span
+                      >
+                    </div>
+                    <div class="flex gap-2">
+                      <button
+                        id="execFetchBtn"
+                        class="exec-btn px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium transition-all flex items-center gap-2"
+                      >
+                        <svg
+                          class="w-4 h-4"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            stroke-width="2"
+                            d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"
+                          />
+                          <path
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            stroke-width="2"
+                            d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                          /></svg
+                        >执行Fetch</button
+                      ><button
+                        onclick="window.copyCodeFromTool()"
+                        class="px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-200 text-xs font-medium transition-all flex items-center gap-2"
+                      >
+                        <svg
+                          class="w-4 h-4"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            stroke-width="2"
+                            d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+                          /></svg
+                        >复制代码
+                      </button>
+                    </div>
+                  </div>
+                  <div class="code-scroll p-6">
+                    <code
+                      id="codeDisplay"
+                      class="mono text-sm leading-relaxed"
+                    ></code>
+                  </div>
+                </div>
+              </div>
+              <div
+                id="resultPanel"
+                class="result-panel mx-6 mb-6 rounded-xl overflow-hidden hidden shadow-lg"
+              >
+                <div
+                  class="flex items-center justify-between px-4 py-2 bg-slate-800/60 border-b border-slate-700"
+                >
+                  <span
+                    class="text-xs font-mono text-slate-300 flex items-center gap-2"
+                    ><span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+                    执行结果</span
+                  ><button
+                    id="clearResultBtn"
+                    class="text-slate-400 hover:text-slate-200 text-xs px-2 py-1 rounded hover:bg-slate-700 transition"
+                  >
+                    清除
+                  </button>
+                </div>
+                <div
+                  id="resultContent"
+                  class="p-4 text-xs font-mono text-slate-300 overflow-auto max-h-80 whitespace-pre-wrap break-all"
+                ></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 结果模态窗（已修复滚动） -->
+    <div
+      id="resultModal"
+      class="fixed inset-0 z-50 hidden"
+      style="background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(4px)"
+    >
+      <div class="flex items-center justify-center min-h-screen p-4">
+        <div
+          class="bg-slate-900 rounded-2xl shadow-2xl max-w-4xl w-full max-h-[85vh] flex flex-col border border-slate-700"
+        >
+          <div
+            class="flex items-center justify-between px-6 py-4 border-b border-slate-700 bg-slate-800/50 rounded-t-2xl"
+          >
+            <div class="flex items-center gap-3">
+              <div
+                id="modalStatusIcon"
+                class="w-8 h-8 rounded-full bg-emerald-500/20 flex items-center justify-center"
+              >
+                <svg
+                  class="w-4 h-4 text-emerald-400"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M5 13l4 4L19 7"
+                  />
+                </svg>
+              </div>
+              <div>
+                <h3 class="text-lg font-semibold text-slate-100">
+                  请求执行结果
+                </h3>
+                <p id="modalStatusText" class="text-sm text-slate-400">
+                  请求成功
+                </p>
+              </div>
+            </div>
+            <button
+              id="closeModalBtn"
+              class="w-8 h-8 rounded-lg bg-slate-700 hover:bg-slate-600 flex items-center justify-center text-slate-400 hover:text-slate-200 transition-all"
+            >
+              <svg
+                class="w-5 h-5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M6 18L18 6M6 6l12 12"
+                />
+              </svg>
+            </button>
+          </div>
+          <div class="flex-1 overflow-hidden flex flex-col">
+            <div class="px-6 py-3 bg-slate-800/30 border-b border-slate-700">
+              <div class="flex items-center gap-3 text-sm">
+                <span
+                  id="modalMethod"
+                  class="px-2 py-1 rounded bg-blue-500/20 text-blue-400 font-mono text-xs font-bold"
+                  >POST</span
+                >
+                <div class="flex-1 min-w-0 flex items-center gap-2">
+                  <span
+                    id="modalUrl"
+                    class="text-slate-300 mono truncate block"
+                    title=""
+                    >https://api.example.com</span
+                  ><button
+                    id="copyUrlBtn"
+                    class="flex-shrink-0 px-2 py-1 rounded bg-slate-700 hover:bg-slate-600 text-slate-300 text-xs transition-all flex items-center gap-1"
+                  >
+                    <svg
+                      class="w-3 h-3"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+                      /></svg
+                    >复制
+                  </button>
+                </div>
+                <span
+                  id="modalTime"
+                  class="text-slate-500 text-xs flex-shrink-0"
+                  >234ms</span
+                >
+              </div>
+            </div>
+            <div class="flex border-b border-slate-700 bg-slate-800/20">
+              <button
+                class="modal-tab active px-4 py-2 text-sm font-medium text-slate-200 border-b-2 border-blue-500"
+                data-tab="response"
+              >
+                响应内容
+              </button>
+              <button
+                class="modal-tab px-4 py-2 text-sm font-medium text-slate-400 hover:text-slate-200 transition-colors"
+                data-tab="headers"
+              >
+                响应头
+              </button>
+              <button
+                class="modal-tab px-4 py-2 text-sm font-medium text-slate-400 hover:text-slate-200 transition-colors"
+                data-tab="request"
+              >
+                请求详情
+              </button>
+            </div>
+            <div
+              class="flex-1 overflow-hidden flex flex-col p-6 bg-slate-950/50"
+            >
+              <!-- 响应内容 -->
+              <div
+                id="tab-response"
+                class="modal-tab-content flex-1 flex flex-col min-h-0"
+              >
+                <div class="code-block flex-1 flex flex-col min-h-0">
+                  <div class="code-header flex-shrink-0">
+                    <span class="text-xs text-slate-400">Response Body</span>
+                    <div class="flex items-center gap-2">
+                      <button
+                        id="downloadImageBtn"
+                        class="hidden px-2 py-1 rounded bg-emerald-600 hover:bg-emerald-500 text-xs text-white transition-all flex items-center gap-1"
+                      >
+                        <svg
+                          class="w-3 h-3"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            stroke-width="2"
+                            d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
+                          /></svg
+                        >下载图片</button
+                      ><button
+                        id="copyResponseBtn"
+                        class="px-2 py-1 rounded bg-slate-700 hover:bg-slate-600 text-xs text-slate-200 transition-all flex items-center gap-1"
+                      >
+                        <svg
+                          class="w-3 h-3"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            stroke-width="2"
+                            d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+                          /></svg
+                        >复制
+                      </button>
+                    </div>
+                  </div>
+                  <div class="modal-content-scroll p-4">
+                    <pre
+                      id="modalResponseBody"
+                      class="mono text-sm leading-relaxed text-emerald-300 w-full"
+                    ></pre>
+                  </div>
+                </div>
+              </div>
+              <!-- 响应头 -->
+              <div
+                id="tab-headers"
+                class="modal-tab-content hidden flex-1 flex-col min-h-0"
+              >
+                <div class="code-block flex-1 flex flex-col min-h-0">
+                  <div class="code-header flex-shrink-0">
+                    <span class="text-xs text-slate-400">Response Headers</span>
+                  </div>
+                  <div class="modal-content-scroll p-4">
+                    <table class="w-full text-sm">
+                      <tbody
+                        id="modalHeadersTable"
+                        class="divide-y divide-slate-700"
+                      ></tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+              <!-- 请求详情（已修复滚动） -->
+              <div
+                id="tab-request"
+                class="modal-tab-content hidden flex-1 flex-col min-h-0"
+              >
+                <div class="code-block flex-1 flex flex-col min-h-0">
+                  <div class="code-header flex-shrink-0">
+                    <span class="text-xs text-slate-400">Request Details</span>
+                  </div>
+                  <div class="modal-content-scroll p-4">
+                    <pre
+                      id="modalRequestDetails"
+                      class="mono text-sm leading-relaxed text-slate-300 w-full"
+                    ></pre>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div
+            class="px-6 py-4 border-t border-slate-700 bg-slate-800/50 rounded-b-2xl flex justify-end gap-3"
+          >
+            <button
+              id="closeModalBtn2"
+              class="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-200 text-sm font-medium transition-all"
+            >
+              关闭</button
+            ><button
+              id="copyAllBtn"
+              class="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium transition-all flex items-center gap-2"
+            >
+              <svg
+                class="w-4 h-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"
+                /></svg
+              >复制全部
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      // ---------- 全局变量 ----------
+      let currentEntries = [];
+      let selectedEntry = null;
+      let currentCode = "";
+      let selectedIndex = -1;
+      let activeAbortController = null;
+
+      // DOM 元素
+      const sidebar = document.getElementById("sidebar");
+      const toggleSidebar = document.getElementById("toggleSidebar");
+      const dropZone = document.getElementById("dropZone");
+      const fileInput = document.getElementById("fileInput");
+      const entryList = document.getElementById("entryList");
+      const entryCount = document.getElementById("entryCount");
+      const emptyState = document.getElementById("emptyState");
+      const codeContainer = document.getElementById("codeContainer");
+      const downloadAll = document.getElementById("downloadAll");
+      const copyCurrent = document.getElementById("copyCurrent");
+      const execFetchBtn = document.getElementById("execFetchBtn");
+      const resultPanel = document.getElementById("resultPanel");
+      const resultContent = document.getElementById("resultContent");
+      const clearResultBtn = document.getElementById("clearResultBtn");
+
+      // 持久化存储
+      const STORAGE_KEYS = {
+        ENTRIES: "har_converter_entries",
+        SELECTED_IDX: "har_converter_selected_idx",
+      };
+      function saveToLocalStorage() {
+        try {
+          if (currentEntries.length)
+            localStorage.setItem(
+              STORAGE_KEYS.ENTRIES,
+              JSON.stringify(currentEntries),
+            );
+          else localStorage.removeItem(STORAGE_KEYS.ENTRIES);
+          if (selectedIndex >= 0 && selectedIndex < currentEntries.length)
+            localStorage.setItem(
+              STORAGE_KEYS.SELECTED_IDX,
+              selectedIndex.toString(),
+            );
+          else localStorage.removeItem(STORAGE_KEYS.SELECTED_IDX);
+        } catch (e) {
+          console.warn(e);
+        }
+      }
+
+      function loadFromLocalStorage() {
+        const storedEntries = localStorage.getItem(STORAGE_KEYS.ENTRIES);
+        if (storedEntries) {
+          try {
+            currentEntries = JSON.parse(storedEntries);
+            if (Array.isArray(currentEntries) && currentEntries.length) {
+              renderEntryList();
+              entryCount.textContent = currentEntries.length;
+              entryCount.classList.remove("hidden");
+              downloadAll.classList.remove("hidden");
+              copyCurrent.classList.remove("hidden");
+              const clearBtn = document.getElementById("clearAllBtn");
+              if (clearBtn) clearBtn.classList.remove("hidden");
+              const storedIdx = localStorage.getItem(STORAGE_KEYS.SELECTED_IDX);
+              let idxToSelect =
+                storedIdx !== null && !isNaN(parseInt(storedIdx))
+                  ? parseInt(storedIdx)
+                  : 0;
+              if (idxToSelect >= currentEntries.length) idxToSelect = 0;
+              if (currentEntries.length > 0) selectEntry(idxToSelect);
+              generateCode();
+              sidebar.classList.add("collapsed");
+              return true;
+            }
+          } catch (e) {
+            console.error(e);
+          }
+        }
+        return false;
+      }
+
+      toggleSidebar.addEventListener("click", () =>
+        sidebar.classList.toggle("collapsed"),
+      );
+      dropZone.addEventListener("click", () => fileInput.click());
+      dropZone.addEventListener("dragover", (e) => {
+        e.preventDefault();
+        dropZone.classList.add("dragover");
+      });
+      dropZone.addEventListener("dragleave", () =>
+        dropZone.classList.remove("dragover"),
+      );
+      dropZone.addEventListener("drop", (e) => {
+        e.preventDefault();
+        dropZone.classList.remove("dragover");
+        if (
+          e.dataTransfer.files.length &&
+          e.dataTransfer.files[0].name.endsWith(".har")
+        )
+          handleFile(e.dataTransfer.files[0]);
+      });
+      fileInput.addEventListener("change", (e) => {
+        if (e.target.files.length) handleFile(e.target.files[0]);
+      });
+
+      function handleFile(file) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          try {
+            const har = JSON.parse(e.target.result);
+            const newEntries = har.log?.entries || [];
+            if (!newEntries.length) throw new Error("HAR 文件中没有 entries");
+            const existingCount = currentEntries.length;
+            currentEntries = currentEntries.concat(newEntries);
+            renderEntryList();
+            entryCount.textContent = currentEntries.length;
+            entryCount.classList.remove("hidden");
+            downloadAll.classList.remove("hidden");
+            copyCurrent.classList.remove("hidden");
+            const clearBtn = document.getElementById("clearAllBtn");
+            if (clearBtn) clearBtn.classList.remove("hidden");
+            saveToLocalStorage();
+            if (newEntries.length) {
+              sidebar.classList.add("collapsed");
+              selectEntry(existingCount);
+            }
+          } catch (err) {
+            alert("无效的 HAR 文件: " + err.message);
+          }
+        };
+        reader.readAsText(file);
+      }
+
+      function renderEntryList() {
+        if (!currentEntries.length) {
+          entryList.innerHTML = `<div class="text-center text-slate-500 py-12"><svg class="w-12 h-12 mx-auto mb-3 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg><p class="text-sm">暂无数据</p></div>`;
+          return;
+        }
+        const methodColors = {
+          GET: "bg-green-500/20 text-green-400",
+          POST: "bg-blue-500/20 text-blue-400",
+          PUT: "bg-yellow-500/20 text-yellow-400",
+          DELETE: "bg-red-500/20 text-red-400",
+          PATCH: "bg-purple-500/20 text-purple-400",
+        };
+        entryList.innerHTML = currentEntries
+          .map((entry, i) => {
+            const method = entry.request.method;
+            const url = new URL(entry.request.url);
+            let pathname = url.pathname;
+            if (pathname.length > 25) pathname = pathname.slice(0, 25) + "...";
+            const customName = entry._customName || "";
+            const displayName = customName || pathname;
+            return `<div class="entry-card rounded-xl p-3 cursor-pointer group relative" onclick="window.selectEntry(${i})" data-index="${i}"><div class="flex items-start gap-3"><span class="method-badge px-2 py-1 rounded ${methodColors[method] || "bg-slate-500/20 text-slate-400"} flex-shrink-0">${method}</span><div class="flex-1 min-w-0"><div class="flex items-center gap-2"><p class="entry-name text-sm font-medium text-slate-200 mono truncate flex-1" title="${escapeHtml(displayName)}">${escapeHtml(displayName)}</p><button onclick="event.stopPropagation(); window.renameEntry(${i})" class="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-slate-700 text-slate-400 hover:text-slate-200 transition-all" title="重命名"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg></button><button onclick="event.stopPropagation(); window.deleteEntry(${i})" class="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-red-500/20 text-slate-400 hover:text-red-400 transition-all" title="删除"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg></button></div><p class="text-xs text-slate-500 mt-1 truncate">${url.hostname}</p></div></div></div>`;
+          })
+          .join("");
+      }
+
+      window.selectEntry = function (index) {
+        if (!currentEntries[index]) return;
+        selectedEntry = currentEntries[index];
+        selectedIndex = index;
+        document.querySelectorAll(".entry-card").forEach((card, i) => {
+          if (i === index) card.classList.add("active");
+          else card.classList.remove("active");
+        });
+        emptyState.classList.add("hidden");
+        codeContainer.classList.remove("hidden");
+        document.getElementById("currentMethod").textContent =
+          selectedEntry.request.method;
+        const urlEl = document.getElementById("currentUrl");
+        urlEl.textContent = selectedEntry.request.url;
+        urlEl.title = selectedEntry.request.url;
+        document.getElementById("currentStatus").textContent =
+          "Status: " + (selectedEntry.response?.status || "N/A");
+        document.getElementById("currentTime").textContent =
+          "Time: " + (selectedEntry.time?.toFixed(0) || "N/A") + "ms";
+        document.getElementById("currentSize").textContent =
+          "Size: " + formatBytes(selectedEntry.response?.bodySize || 0);
+        generateCode();
+        saveToLocalStorage();
+      };
+
+      window.clearAllEntries = function () {
+        if (!confirm("确定要清空所有历史记录吗？此操作不可恢复。")) return;
+        currentEntries = [];
+        selectedEntry = null;
+        selectedIndex = -1;
+        renderEntryList();
+        entryCount.textContent = "0";
+        entryCount.classList.add("hidden");
+        downloadAll.classList.add("hidden");
+        copyCurrent.classList.add("hidden");
+        emptyState.classList.remove("hidden");
+        codeContainer.classList.add("hidden");
+        saveToLocalStorage();
+      };
+
+      window.deleteEntry = function (index) {
+        if (!confirm("确定要删除这个请求吗？")) return;
+        currentEntries.splice(index, 1);
+        if (selectedIndex === index) {
+          selectedEntry = null;
+          selectedIndex = -1;
+          emptyState.classList.remove("hidden");
+          codeContainer.classList.add("hidden");
+        } else if (selectedIndex > index) selectedIndex--;
+        renderEntryList();
+        entryCount.textContent = currentEntries.length;
+        if (currentEntries.length === 0) {
+          entryCount.classList.add("hidden");
+          downloadAll.classList.add("hidden");
+          copyCurrent.classList.add("hidden");
+        }
+        saveToLocalStorage();
+      };
+
+      window.renameEntry = function (index) {
+        const entry = currentEntries[index];
+        const currentName = entry._customName || "";
+        const card = document.querySelector(
+          `.entry-card[data-index="${index}"]`,
+        );
+        const nameEl = card.querySelector(".entry-name");
+        const input = document.createElement("input");
+        input.type = "text";
+        input.value = currentName;
+        input.placeholder = "输入名称...";
+        input.className =
+          "bg-slate-800 border border-slate-600 rounded px-2 py-1 text-sm text-slate-200 w-full focus:outline-none focus:border-blue-500";
+        nameEl.replaceWith(input);
+        input.focus();
+        input.select();
+        const save = () => {
+          const newName = input.value.trim();
+          if (newName) entry._customName = newName;
+          else delete entry._customName;
+          saveToLocalStorage();
+          renderEntryList();
+          if (selectedIndex >= 0) {
+            const newCard = document.querySelector(
+              `.entry-card[data-index="${selectedIndex}"]`,
+            );
+            if (newCard) newCard.classList.add("active");
+          }
+        };
+        input.addEventListener("blur", save);
+        input.addEventListener("keydown", (e) => {
+          if (e.key === "Enter") input.blur();
+          else if (e.key === "Escape") renderEntryList();
+        });
+      };
+
+      function formatBytes(bytes) {
+        if (bytes === 0) return "0 B";
+        const k = 1024,
+          sizes = ["B", "KB", "MB", "GB"];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + sizes[i];
+      }
+
+      // Fetch 代码生成
+      function toFetch(entry) {
+        try {
+          const { request } = entry;
+          let lines = [
+            `fetch("${request.url}", {`,
+            `    method: "${request.method}",`,
+          ];
+          if (request.headers?.length) {
+            lines.push("    headers: {");
+            request.headers.forEach((h, i) =>
+              lines.push(
+                `        "${h.name}": "${h.value}"${i < request.headers.length - 1 ? "," : ""}`,
+              ),
+            );
+            lines.push("    },");
+          }
+          const methodsWithBody = ["POST", "PUT", "PATCH", "DELETE"];
+          if (
+            request.postData?.text &&
+            methodsWithBody.includes(request.method)
+          ) {
+            const bodyText = request.postData.text
+              .replace(/\\/g, "\\\\")
+              .replace(/`/g, "\\`")
+              .replace(/\$/g, "\\$");
+            lines.push(`    body: \`${bodyText}\`,`);
+          }
+          lines.push(
+            "})",
+            ".then(response => {",
+            "    if (!response.ok) throw new Error(`HTTP ${response.status}`);",
+            "    return response.json();",
+            "})",
+            ".then(data => console.log(data))",
+            ".catch(error => console.error('Error:', error));",
+          );
+          return lines.join("\n");
+        } catch (e) {
+          return "// Fetch 代码生成失败: " + e.message;
+        }
+      }
+
+      function generateCode() {
+        if (!selectedEntry) return;
+        currentCode = toFetch(selectedEntry);
+        document.getElementById("codeFilename").textContent = "request.js";
+        document.getElementById("codeDisplay").innerHTML =
+          highlightCode(currentCode);
+      }
+
+      function highlightCode(code) {
+        let html = code
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;");
+        html = html
+          .replace(
+            /(^|[^\w])(fetch|then|catch|throw|new|return|if|const|let|var|function)(?![\w])/g,
+            '$1<span class="syntax-keyword">$2</span>',
+          )
+          .replace(
+            /([,{]\s*)(&quot;?\w+&quot;?)(\s*:)/g,
+            '$1<span class="syntax-function">$2</span>$3',
+          );
+        return html;
+      }
+
+      window.copyCodeFromTool = function () {
+        if (!currentCode) return;
+        navigator.clipboard.writeText(currentCode).then(() => {
+          const btn = document.querySelector(".code-header button:last-child");
+          const original = btn.innerHTML;
+          btn.innerHTML = `<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg> 已复制`;
+          setTimeout(() => (btn.innerHTML = original), 2000);
+        });
+      };
+      copyCurrent.addEventListener("click", () => window.copyCodeFromTool());
+
+      downloadAll.addEventListener("click", () => {
+        currentEntries.forEach((entry, i) => {
+          const code = toFetch(entry);
+          const blob = new Blob([code], { type: "text/plain" });
+          const a = document.createElement("a");
+          a.href = URL.createObjectURL(blob);
+          a.download = `req_${i + 1}.js`;
+          a.click();
+          URL.revokeObjectURL(a.href);
+        });
+      });
+      clearResultBtn.addEventListener("click", () => {
+        resultPanel.classList.add("hidden");
+        resultContent.innerHTML = "";
+      });
+
+      // 执行 Fetch 请求
+      async function executeFetchFromEntry() {
+        if (!selectedEntry) return;
+        if (activeAbortController) activeAbortController.abort();
+        activeAbortController = new AbortController();
+        const { signal } = activeAbortController;
+        execFetchBtn.disabled = true;
+        execFetchBtn.innerHTML = `<svg class="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg> 执行中...`;
+        const startTime = performance.now();
+        try {
+          const { request } = selectedEntry;
+          const fetchOptions = {
+            method: request.method,
+            signal,
+            mode: "cors",
+            credentials: "omit",
+          };
+          if (request.headers?.length) {
+            const headers = {};
+            request.headers.forEach((h) => {
+              const nameLower = h.name.toLowerCase();
+              if (
+                ![
+                  "host",
+                  "connection",
+                  "content-length",
+                  "origin",
+                  "referer",
+                ].includes(nameLower)
+              )
+                headers[h.name] = h.value;
+            });
+            if (Object.keys(headers).length) fetchOptions.headers = headers;
+          }
+          const methodsWithBody = ["POST", "PUT", "PATCH", "DELETE"];
+          if (
+            request.postData?.text &&
+            methodsWithBody.includes(request.method)
+          )
+            fetchOptions.body = request.postData.text;
+          const response = await fetch(request.url, fetchOptions);
+          const duration = (performance.now() - startTime).toFixed(0);
+          let responseBody,
+            responseBlob = null,
+            isImage = false;
+          const contentType = response.headers.get("content-type") || "";
+          isImage = contentType.startsWith("image/");
+          if (isImage) {
+            responseBlob = await response.blob();
+            responseBody = "[图片数据]";
+          } else if (contentType.includes("application/json"))
+            responseBody = await response.json();
+          else responseBody = await response.text();
+          showResultModal({
+            success: true,
+            status: response.status,
+            statusText: response.statusText,
+            duration,
+            url: request.url,
+            method: request.method,
+            responseBody,
+            responseBlob,
+            isImage,
+            contentType,
+            responseHeaders: Array.from(response.headers.entries()),
+            requestDetails: fetchOptions,
+          });
+        } catch (error) {
+          const duration = (performance.now() - startTime).toFixed(0);
+          showResultModal({
+            success: false,
+            error: error.message,
+            errorName: error.name,
+            duration,
+            url: selectedEntry.request.url,
+            method: selectedEntry.request.method,
+          });
+        } finally {
+          execFetchBtn.disabled = false;
+          execFetchBtn.innerHTML = `<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg> 执行Fetch`;
+          activeAbortController = null;
+        }
+      }
+
+      function showResultModal(data) {
+        const modal = document.getElementById("resultModal");
+        const statusIcon = document.getElementById("modalStatusIcon");
+        const statusText = document.getElementById("modalStatusText");
+        const methodSpan = document.getElementById("modalMethod");
+        const urlSpan = document.getElementById("modalUrl");
+        const timeSpan = document.getElementById("modalTime");
+        const existingImg = document.getElementById("responseImage");
+        if (existingImg) {
+          if (existingImg.src && existingImg.src.startsWith("blob:"))
+            URL.revokeObjectURL(existingImg.src);
+          existingImg.remove();
+        }
+        const responseBodyPre = document.getElementById("modalResponseBody");
+        responseBodyPre.style.display = "block";
+        responseBodyPre.textContent = "";
+        responseBodyPre.className =
+          "mono text-sm leading-relaxed text-emerald-300 w-full";
+        const downloadImageBtn = document.getElementById("downloadImageBtn");
+        if (downloadImageBtn) {
+          downloadImageBtn.classList.add("hidden");
+          delete downloadImageBtn.dataset.imageUrl;
+          delete downloadImageBtn.dataset.contentType;
+        }
+        methodSpan.textContent = data.method;
+        urlSpan.textContent = data.url;
+        urlSpan.title = data.url;
+        timeSpan.textContent = data.duration + "ms";
+        if (data.success) {
+          statusIcon.className =
+            "w-8 h-8 rounded-full bg-emerald-500/20 flex items-center justify-center";
+          statusIcon.innerHTML = `<svg class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>`;
+          statusText.textContent = `HTTP ${data.status} ${data.statusText}`;
+          statusText.className = "text-sm text-emerald-400";
+          const scrollContainer = document.querySelector(
+            "#tab-response .modal-content-scroll",
+          );
+          if (data.isImage && data.responseBlob) {
+            responseBodyPre.style.display = "none";
+            const img = document.createElement("img");
+            const imageUrl = URL.createObjectURL(data.responseBlob);
+            img.src = imageUrl;
+            img.className = "max-w-full max-h-[500px] rounded-lg shadow-lg";
+            img.alt = "响应图片";
+            img.id = "responseImage";
+            scrollContainer.appendChild(img);
+            if (downloadImageBtn) {
+              downloadImageBtn.classList.remove("hidden");
+              downloadImageBtn.dataset.imageUrl = imageUrl;
+              downloadImageBtn.dataset.contentType =
+                data.contentType || "image/png";
+            }
+          } else {
+            responseBodyPre.style.display = "block";
+            responseBodyPre.textContent =
+              typeof data.responseBody === "object"
+                ? JSON.stringify(data.responseBody, null, 2)
+                : data.responseBody;
+            if (downloadImageBtn) downloadImageBtn.classList.add("hidden");
+          }
+          document.getElementById("modalHeadersTable").innerHTML =
+            data.responseHeaders
+              .map(
+                ([name, value]) =>
+                  `<tr><td class="py-2 pr-4 text-slate-400 font-mono text-xs whitespace-nowrap">${escapeHtml(name)}</td><td class="py-2 text-slate-300 font-mono text-xs break-all">${escapeHtml(value)}</td></tr>`,
+              )
+              .join("");
+          document.getElementById("modalRequestDetails").textContent =
+            JSON.stringify(data.requestDetails, null, 2);
+        } else {
+          statusIcon.className =
+            "w-8 h-8 rounded-full bg-red-500/20 flex items-center justify-center";
+          statusIcon.innerHTML = `<svg class="w-4 h-4 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>`;
+          statusText.textContent =
+            data.errorName === "AbortError" ? "请求已取消" : "请求失败";
+          statusText.className = "text-sm text-red-400";
+          responseBodyPre.style.display = "block";
+          responseBodyPre.textContent = `Error: ${data.error}`;
+          responseBodyPre.className =
+            "mono text-sm leading-relaxed text-red-400";
+          document.getElementById("modalHeadersTable").innerHTML =
+            '<tr><td class="py-4 text-slate-500 text-center">无响应头</td></tr>';
+          document.getElementById("modalRequestDetails").textContent =
+            "请求未能完成";
+        }
+        switchModalTab("response");
+        modal.classList.remove("hidden");
+        document.body.style.overflow = "hidden";
+      }
+
+      function closeResultModal() {
+        const modal = document.getElementById("resultModal");
+        const img = document.getElementById("responseImage");
+        if (img) {
+          if (img.src && img.src.startsWith("blob:"))
+            URL.revokeObjectURL(img.src);
+          img.remove();
+        }
+        const responseBodyPre = document.getElementById("modalResponseBody");
+        if (responseBodyPre) {
+          responseBodyPre.style.display = "block";
+          responseBodyPre.textContent = "";
+        }
+        const downloadImageBtn = document.getElementById("downloadImageBtn");
+        if (downloadImageBtn) {
+          downloadImageBtn.classList.add("hidden");
+          delete downloadImageBtn.dataset.imageUrl;
+          delete downloadImageBtn.dataset.contentType;
+        }
+        modal.classList.add("hidden");
+        document.body.style.overflow = "";
+      }
+
+      function switchModalTab(tabName) {
+        document.querySelectorAll(".modal-tab").forEach((btn) => {
+          if (btn.dataset.tab === tabName) {
+            btn.classList.add(
+              "active",
+              "text-slate-200",
+              "border-b-2",
+              "border-blue-500",
+            );
+            btn.classList.remove("text-slate-400");
+          } else {
+            btn.classList.remove(
+              "active",
+              "text-slate-200",
+              "border-b-2",
+              "border-blue-500",
+            );
+            btn.classList.add("text-slate-400");
+          }
+        });
+        document
+          .querySelectorAll(".modal-tab-content")
+          .forEach((content) => content.classList.add("hidden"));
+        document.getElementById(`tab-${tabName}`).classList.remove("hidden");
+      }
+
+      function escapeHtml(str) {
+        return String(str).replace(/[&<>]/g, function (m) {
+          if (m === "&") return "&amp;";
+          if (m === "<") return "&lt;";
+          if (m === ">") return "&gt;";
+          return m;
+        });
+      }
+
+      // 绑定模态框事件
+      function bindModalEvents() {
+        document
+          .getElementById("closeModalBtn")
+          ?.addEventListener("click", closeResultModal);
+        document
+          .getElementById("closeModalBtn2")
+          ?.addEventListener("click", closeResultModal);
+        document
+          .getElementById("resultModal")
+          ?.addEventListener("click", (e) => {
+            if (e.target.id === "resultModal") closeResultModal();
+          });
+        document.addEventListener("keydown", (e) => {
+          if (e.key === "Escape") closeResultModal();
+        });
+        document
+          .querySelectorAll(".modal-tab")
+          .forEach((tab) =>
+            tab.addEventListener("click", () =>
+              switchModalTab(tab.dataset.tab),
+            ),
+          );
+        document.getElementById("copyUrlBtn")?.addEventListener("click", () => {
+          const url =
+            document.getElementById("modalUrl").title ||
+            document.getElementById("modalUrl").textContent;
+          navigator.clipboard.writeText(url);
+        });
+        document
+          .getElementById("downloadImageBtn")
+          ?.addEventListener("click", () => {
+            const imageUrl =
+              document.getElementById("downloadImageBtn")?.dataset.imageUrl;
+            if (imageUrl) {
+              const a = document.createElement("a");
+              a.href = imageUrl;
+              a.download = "response_image.png";
+              a.click();
+            }
+          });
+        document
+          .getElementById("copyResponseBtn")
+          ?.addEventListener("click", () => {
+            const responseBody = document.getElementById("modalResponseBody");
+            const img = responseBody.parentElement.querySelector("img");
+            const text = img ? "[图片数据]" : responseBody.textContent;
+            navigator.clipboard.writeText(text);
+          });
+        document.getElementById("copyAllBtn")?.addEventListener("click", () => {
+          const responseBody = document.getElementById("modalResponseBody");
+          const img = responseBody.parentElement.querySelector("img");
+          const response = img ? "[图片数据]" : responseBody.textContent;
+          const headers =
+            document.getElementById("modalHeadersTable").textContent;
+          navigator.clipboard.writeText(
+            `Response Body:\n${response}\n\nResponse Headers:\n${headers}`,
+          );
+        });
+      }
+      if (document.readyState === "loading")
+        document.addEventListener("DOMContentLoaded", bindModalEvents);
+      else bindModalEvents();
+
+      const copyCurrentUrlBtn = document.getElementById("copyCurrentUrlBtn");
+      if (copyCurrentUrlBtn)
+        copyCurrentUrlBtn.addEventListener("click", () => {
+          const url =
+            document.getElementById("currentUrl").title ||
+            document.getElementById("currentUrl").textContent;
+          navigator.clipboard.writeText(url);
+          const original = copyCurrentUrlBtn.innerHTML;
+          copyCurrentUrlBtn.innerHTML = `<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg> 已复制`;
+          setTimeout(() => (copyCurrentUrlBtn.innerHTML = original), 2000);
+        });
+      execFetchBtn.addEventListener("click", executeFetchFromEntry);
+      loadFromLocalStorage();
+    </script>
+  </body>
+</html>
