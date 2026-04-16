@@ -1,0 +1,532 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>长图拼接器</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        font: 14px/1.4 sans-serif;
+        background: #1e1e1e;
+        color: #eee;
+        overflow: hidden;
+      }
+      #start,
+      #edit {
+        display: none;
+        height: 100%;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+      }
+      #start.active,
+      #edit.active {
+        display: flex;
+      }
+      #drop {
+        width: 400px;
+        height: 200px;
+        border: 2px dashed #666;
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+      }
+      #drop.dragover {
+        border-color: #0c0;
+        background: #003300;
+      }
+      #main {
+        width: 50vw;
+        height: calc(100% - 60px);
+        overflow-y: auto;
+        display: flex;
+        justify-content: center;
+        align-items: flex-start;
+        padding: 20px 0;
+        box-sizing: border-box;
+        position: relative;
+        background: #3a3a3a;
+        border: none;
+        border-radius: 0;
+      }
+      #canvas {
+        background: #fff;
+        box-shadow: 0 0 20px rgba(0, 0, 0, 0.6);
+        display: block;
+      }
+      #bar {
+        width: 100%;
+        background: #111;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        padding: 10px 0;
+        position: fixed;
+        bottom: 0;
+        left: 0;
+      }
+      button {
+        padding: 8px 18px;
+        border: none;
+        border-radius: 4px;
+        background: #0c0;
+        color: #fff;
+        cursor: pointer;
+      }
+      button:disabled {
+        background: #444;
+        cursor: not-allowed;
+      }
+      button.secondary {
+        background: #666;
+      }
+      button.danger {
+        background: #c00;
+      }
+      button.hidden {
+        display: none;
+      }
+      #modal {
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.7);
+        display: none;
+        align-items: center;
+        justify-content: center;
+      }
+      #modal.show {
+        display: flex;
+      }
+      #box {
+        background: #222;
+        padding: 20px;
+        border-radius: 6px;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+      @keyframes blink {
+        50% {
+          opacity: 0;
+        }
+      }
+      .cursor {
+        position: absolute;
+        width: 2px;
+        background: #ff0000;
+        animation: blink 1s infinite;
+        pointer-events: none;
+      }
+      #main::-webkit-scrollbar {
+        width: 8px;
+      }
+      #main::-webkit-scrollbar-track {
+        background: #2a2a2a;
+      }
+      #main::-webkit-scrollbar-thumb {
+        background: #555;
+        border-radius: 4px;
+      }
+      #main::-webkit-scrollbar-thumb:hover {
+        background: #777;
+      }
+      #main {
+        scrollbar-width: thin;
+        scrollbar-color: #555 #2a2a2a;
+      }
+      #selection-info {
+        position: fixed;
+        top: 10px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: #00aaff;
+        color: #000;
+        padding: 6px 16px;
+        border-radius: 4px;
+        font-weight: bold;
+        display: none;
+        z-index: 100;
+      }
+      #selection-info.show {
+        display: block;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="selection-info">
+      已选中第 <span id="selected-idx">0</span> 张图
+    </div>
+
+    <div id="start" class="active">
+      <div id="drop">+ 请添加图片（可多选）</div>
+      <input
+        id="file"
+        type="file"
+        multiple
+        accept="image/*"
+        style="display: none"
+      />
+    </div>
+
+    <div id="edit">
+      <div id="main">
+        <canvas id="canvas"></canvas>
+        <div id="cursor" class="cursor" style="display: none"></div>
+      </div>
+    </div>
+
+    <div id="bar" style="display: none">
+      <button id="insert-before" class="secondary hidden">前插图片</button>
+      <button id="insert-after" class="secondary hidden">后插图片</button>
+      <button id="delete" class="danger hidden">删除选中</button>
+      <button id="insert">添加图片</button>
+      <button id="export">导出长图</button>
+    </div>
+
+    <div id="modal">
+      <div id="box">
+        <label
+          >背景颜色 <input id="bgColor" type="color" value="#ffffff"
+        /></label>
+        <label>水平居中 <input id="center" type="checkbox" checked /></label>
+        <div style="display: flex; gap: 10px">
+          <button id="ok">确定导出</button>
+          <button id="cancel">取消</button>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const W0 = 1170;
+      const GAP = 30;
+      let list = [];
+      let selected = null;
+      let currentScale = 1;
+
+      const start = document.getElementById("start");
+      const edit = document.getElementById("edit");
+      const drop = document.getElementById("drop");
+      const fileIn = document.getElementById("file");
+      const canvas = document.getElementById("canvas");
+      const ctx = canvas.getContext("2d");
+      const cursor = document.getElementById("cursor");
+      const bar = document.getElementById("bar");
+      const insertBtn = document.getElementById("insert");
+      const exportBtn = document.getElementById("export");
+      const insertBeforeBtn = document.getElementById("insert-before");
+      const insertAfterBtn = document.getElementById("insert-after");
+      const deleteBtn = document.getElementById("delete");
+      const selectionInfo = document.getElementById("selection-info");
+      const selectedIdxSpan = document.getElementById("selected-idx");
+      const modal = document.getElementById("modal");
+      const ok = document.getElementById("ok");
+      const cancel = document.getElementById("cancel");
+      const main = document.getElementById("main");
+
+      let insertMode = null;
+      let insertTargetIndex = null;
+
+      drop.addEventListener("click", () => {
+        insertMode = null;
+        fileIn.click();
+      });
+      handleDrag(drop);
+      fileIn.addEventListener("change", () => {
+        handleFiles([...fileIn.files]);
+        fileIn.value = "";
+      });
+
+      insertBtn.addEventListener("click", () => {
+        insertMode = null;
+        fileIn.click();
+      });
+
+      insertBeforeBtn.addEventListener("click", () => {
+        if (selected === null) return;
+        insertMode = "before";
+        insertTargetIndex = selected;
+        fileIn.click();
+      });
+
+      insertAfterBtn.addEventListener("click", () => {
+        if (selected === null) return;
+        insertMode = "after";
+        insertTargetIndex = selected;
+        fileIn.click();
+      });
+
+      deleteBtn.addEventListener("click", () => {
+        if (selected === null) return;
+        if (confirm(`确定要删除第 ${selected + 1} 张图片吗？`)) {
+          list.splice(selected, 1);
+          selected = null;
+          updateSelectionUI();
+          layout();
+        }
+      });
+
+      function handleFiles(files) {
+        const imageFiles = files.filter((f) => f.type.startsWith("image/"));
+        if (imageFiles.length === 0) return;
+
+        Promise.all(imageFiles.map((f) => loadImg(f))).then((arr) => {
+          if (edit.classList.contains("active")) {
+            if (insertMode === "before" && insertTargetIndex !== null) {
+              list.splice(insertTargetIndex, 0, ...arr);
+              selected = insertTargetIndex;
+            } else if (insertMode === "after" && insertTargetIndex !== null) {
+              list.splice(insertTargetIndex + 1, 0, ...arr);
+              selected = insertTargetIndex + 1;
+            } else {
+              list.push(...arr);
+              selected = list.length - arr.length; // 选中新添加的第一张
+            }
+            layout();
+            updateSelectionUI();
+            // 滚动到新选中的图片
+            setTimeout(() => scrollToSelected(), 100);
+          } else {
+            arr.forEach((o) => list.push(o));
+            switchToEdit();
+          }
+          insertMode = null;
+          insertTargetIndex = null;
+        });
+      }
+
+      function loadImg(file) {
+        return new Promise((res) => {
+          const img = new Image();
+          img.onload = () => {
+            const h0 = Math.round(img.height * (W0 / img.width));
+            res({ img, h0, y0: 0 });
+          };
+          img.src = URL.createObjectURL(file);
+        });
+      }
+
+      function switchToEdit() {
+        start.classList.remove("active");
+        edit.classList.add("active");
+        bar.style.display = "flex";
+        layout();
+      }
+
+      function updateSelectionUI() {
+        if (selected !== null) {
+          insertBeforeBtn.classList.remove("hidden");
+          insertAfterBtn.classList.remove("hidden");
+          deleteBtn.classList.remove("hidden");
+          selectionInfo.classList.add("show");
+          selectedIdxSpan.textContent = selected + 1;
+        } else {
+          insertBeforeBtn.classList.add("hidden");
+          insertAfterBtn.classList.add("hidden");
+          deleteBtn.classList.add("hidden");
+          selectionInfo.classList.remove("show");
+        }
+      }
+
+      function layout() {
+        let y = 30;
+        list.forEach((o) => {
+          o.y0 = y;
+          y += o.h0 + GAP;
+        });
+        const totalOriginalHeight = y - GAP + 30;
+
+        const containerWidth = main.clientWidth;
+        const previewWidth = Math.min(containerWidth - 40, W0);
+        currentScale = previewWidth / W0;
+
+        const totalHeight = totalOriginalHeight * currentScale;
+
+        canvas.width = previewWidth;
+        canvas.height = totalHeight;
+
+        drawAll(currentScale, previewWidth);
+        updateCursor();
+      }
+
+      function drawAll(scale, previewWidth) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = "#3a3a3a";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        const innerWidth = previewWidth - 40;
+        const offsetX = 20;
+
+        list.forEach((o, i) => {
+          const ph = o.h0 * scale;
+          const py = o.y0 * scale;
+
+          ctx.drawImage(
+            o.img,
+            0,
+            0,
+            o.img.width,
+            o.img.height,
+            offsetX,
+            py,
+            innerWidth,
+            ph,
+          );
+
+          if (i === selected) {
+            ctx.strokeStyle = "#00aaff";
+            ctx.lineWidth = 3;
+            ctx.strokeRect(offsetX, py, innerWidth, ph);
+
+            ctx.fillStyle = "#00aaff";
+            ctx.fillRect(offsetX, py, 30, 20);
+            ctx.fillStyle = "#fff";
+            ctx.font = "bold 14px sans-serif";
+            ctx.textAlign = "center";
+            ctx.fillText(i + 1, offsetX + 15, py + 15);
+          } else {
+            ctx.fillStyle = "rgba(0,0,0,0.5)";
+            ctx.fillRect(offsetX, py, 25, 18);
+            ctx.fillStyle = "#fff";
+            ctx.font = "12px sans-serif";
+            ctx.textAlign = "center";
+            ctx.fillText(i + 1, offsetX + 12, py + 13);
+          }
+        });
+      }
+
+      function updateCursor() {
+        cursor.style.display = "none";
+      }
+
+      // 关键修复：点击检测坐标计算
+      canvas.addEventListener("click", (e) => {
+        const rect = canvas.getBoundingClientRect();
+        // 修复：e.clientY - rect.top 已经得到相对于 canvas 的坐标
+        // 不需要加 main.scrollTop，因为 rect.top 已经包含了滚动的影响
+        const yInCanvas = e.clientY - rect.top;
+
+        let hit = null;
+        for (let i = 0; i < list.length; i++) {
+          const py = list[i].y0 * currentScale;
+          const ph = list[i].h0 * currentScale;
+          if (yInCanvas >= py && yInCanvas <= py + ph) {
+            hit = i;
+            break;
+          }
+        }
+
+        if (hit !== null) {
+          selected = hit;
+        } else {
+          selected = null;
+        }
+        updateSelectionUI();
+        drawAll(currentScale, canvas.width);
+      });
+
+      exportBtn.addEventListener("click", () => modal.classList.add("show"));
+      cancel.addEventListener("click", () => modal.classList.remove("show"));
+      ok.addEventListener("click", () => {
+        modal.classList.remove("show");
+        const bg = document.getElementById("bgColor").value;
+        const center = document.getElementById("center").checked;
+        generate(bg, center);
+      });
+
+      function generate(bg, center) {
+        if (list.length === 0) return;
+
+        const H = list.reduce((s, o) => s + o.h0, 0) + GAP * (list.length - 1);
+        const temp = document.createElement("canvas");
+        const ttx = temp.getContext("2d");
+        temp.width = W0;
+        temp.height = H;
+
+        ttx.fillStyle = bg;
+        ttx.fillRect(0, 0, W0, H);
+
+        let y = 0;
+        list.forEach((o) => {
+          ttx.drawImage(o.img, 0, y, W0, o.h0);
+          y += o.h0 + GAP;
+        });
+
+        temp.toBlob((blob) => {
+          const a = document.createElement("a");
+          a.download = "long_image_" + Date.now() + ".png";
+          a.href = URL.createObjectURL(blob);
+          a.click();
+        }, "image/png");
+      }
+
+      function handleDrag(el) {
+        ["dragenter", "dragover", "dragleave", "drop"].forEach((ev) =>
+          el.addEventListener(ev, (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+          }),
+        );
+        ["dragenter", "dragover"].forEach((ev) =>
+          el.addEventListener(ev, () => el.classList.add("dragover")),
+        );
+        ["dragleave", "drop"].forEach((ev) =>
+          el.addEventListener(ev, () => el.classList.remove("dragover")),
+        );
+        el.addEventListener("drop", (e) =>
+          handleFiles(
+            [...e.dataTransfer.files].filter((f) =>
+              f.type.startsWith("image/"),
+            ),
+          ),
+        );
+      }
+
+      document.addEventListener("keydown", (e) => {
+        if (selected === null) return;
+
+        if (e.key === "Delete" || e.key === "Backspace") {
+          deleteBtn.click();
+        } else if (e.key === "ArrowUp" && selected > 0) {
+          selected--;
+          updateSelectionUI();
+          drawAll(currentScale, canvas.width);
+          scrollToSelected();
+        } else if (e.key === "ArrowDown" && selected < list.length - 1) {
+          selected++;
+          updateSelectionUI();
+          drawAll(currentScale, canvas.width);
+          scrollToSelected();
+        }
+      });
+
+      function scrollToSelected() {
+        if (selected === null) return;
+        const item = list[selected];
+        const py = item.y0 * currentScale;
+        const ph = item.h0 * currentScale;
+        const scrollTop = main.scrollTop;
+        const viewportHeight = main.clientHeight;
+
+        if (py < scrollTop) {
+          main.scrollTo({ top: py - 20, behavior: "smooth" });
+        } else if (py + ph > scrollTop + viewportHeight) {
+          main.scrollTo({
+            top: py + ph - viewportHeight + 20,
+            behavior: "smooth",
+          });
+        }
+      }
+
+      window.addEventListener("resize", () => {
+        if (edit.classList.contains("active")) {
+          layout();
+        }
+      });
+    </script>
+  </body>
+</html>

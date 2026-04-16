@@ -1,0 +1,627 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>假设分配法计算器</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          "Helvetica Neue", Arial, sans-serif;
+        background: #f5f5f5;
+        padding: 20px;
+        min-height: 100vh;
+      }
+
+      .container {
+        max-width: 1200px;
+        margin: 0 auto;
+        background: white;
+        border: 2px solid #333;
+        display: flex;
+        min-height: 600px;
+      }
+
+      /* 左侧区域 */
+      .left-panel {
+        width: 40%;
+        border-right: 2px solid #333;
+        padding: 40px;
+        background: #fafafa;
+      }
+
+      .section-title {
+        font-size: 18px;
+        font-weight: bold;
+        margin-bottom: 30px;
+        color: #333;
+        border-bottom: 2px solid #333;
+        padding-bottom: 10px;
+        text-align: center;
+      }
+
+      .input-group {
+        margin-bottom: 25px;
+      }
+
+      .input-group label {
+        display: block;
+        margin-bottom: 8px;
+        font-weight: 600;
+        color: #555;
+      }
+
+      .input-group input {
+        width: 100%;
+        padding: 12px;
+        border: 2px solid #333;
+        font-size: 16px;
+        font-family: inherit;
+        outline: none;
+        transition: background 0.2s;
+      }
+
+      .input-group input:focus {
+        background: #fff8dc;
+      }
+
+      .result-box {
+        margin-top: 40px;
+        padding: 20px;
+        border: 2px solid #333;
+        background: white;
+      }
+
+      .result-item {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 15px;
+        font-size: 16px;
+      }
+
+      .result-item:last-child {
+        margin-bottom: 0;
+        padding-top: 15px;
+        border-top: 1px solid #ddd;
+        font-weight: bold;
+      }
+
+      .formula {
+        font-size: 12px;
+        color: #666;
+        margin-top: 5px;
+        font-family: "Courier New", monospace;
+      }
+
+      /* 右侧区域 */
+      .right-panel {
+        width: 60%;
+        padding: 40px;
+        position: relative;
+        background: white;
+      }
+
+      .tree-container {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 30px;
+        margin-top: 20px;
+      }
+
+      .node {
+        border: 2px solid #333;
+        padding: 15px 30px;
+        background: white;
+        font-weight: 600;
+        min-width: 120px;
+        text-align: center;
+        position: relative;
+        transition: all 0.3s;
+      }
+
+      .node.highlight {
+        background: #fff8dc;
+      }
+
+      .node.placeholder {
+        color: #999;
+        border-style: dashed;
+      }
+
+      .level {
+        display: flex;
+        gap: 70px;
+        position: relative;
+      }
+
+      /* 连接线 */
+      .connector {
+        position: absolute;
+        background: #333;
+      }
+
+      .connector-vertical {
+        width: 2px;
+        height: 30px;
+        top: -30px;
+        left: 50%;
+        transform: translateX(-50%);
+      }
+
+      .connector-diagonal-left {
+        width: 2px;
+        height: 40px;
+        top: -40px;
+        left: 50%;
+        transform: translateX(-50%) rotate(-25deg);
+        transform-origin: bottom;
+      }
+
+      .connector-diagonal-right {
+        width: 2px;
+        height: 40px;
+        top: -40px;
+        left: 50%;
+        transform: translateX(-50%) rotate(25deg);
+        transform-origin: bottom;
+      }
+
+      .level-1 {
+        position: relative;
+      }
+
+      .level-1::before {
+        content: "";
+        position: absolute;
+        top: -30px;
+        left: 50%;
+        width: 2px;
+        height: 30px;
+        background: #333;
+        transform: translateX(-50%);
+      }
+
+      .level-2-wrapper {
+        position: relative;
+        width: 100%;
+        display: flex;
+        justify-content: center;
+      }
+
+      .level-2 {
+        position: relative;
+        margin-top: 10px;
+      }
+
+      .level-2::before {
+        content: "";
+        position: absolute;
+        top: -30px;
+        left: 50%;
+        width: 2px;
+        height: 30px;
+        background: #333;
+        transform: translateX(-50%);
+      }
+
+      /* 分叉线 */
+      .branch-lines {
+        position: absolute;
+        top: 10px;
+        left: 50%;
+        width: 200px;
+        height: 30px;
+        transform: translateX(-50%);
+      }
+
+      .branch-line-left,
+      .branch-line-right {
+        position: absolute;
+        top: 0;
+        width: 2px;
+        height: 35px;
+        background: #333;
+      }
+
+      .branch-line-left {
+        left: 0;
+        transform: rotate(25deg);
+        transform-origin: top;
+      }
+
+      .branch-line-right {
+        right: 0;
+        transform: rotate(-25deg);
+        transform-origin: top;
+      }
+
+      .horizontal-line {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 2px;
+        background: #333;
+      }
+
+      .summary-box {
+        margin-top: 40px;
+        display: flex;
+        gap: 40px;
+        justify-content: center;
+      }
+
+      .summary-item {
+        border: 2px solid #333;
+        padding: 15px 25px;
+        text-align: center;
+        min-width: 150px;
+        background: #f0f0f0;
+      }
+
+      .summary-label {
+        font-size: 12px;
+        color: #666;
+        margin-bottom: 5px;
+      }
+
+      .summary-value {
+        font-size: 20px;
+        font-weight: bold;
+        color: #333;
+      }
+
+      .empty-state {
+        text-align: center;
+        color: #999;
+        margin-top: 100px;
+        font-size: 14px;
+      }
+
+      .calculation-detail {
+        font-size: 12px;
+        color: #666;
+        margin-top: 5px;
+        font-weight: normal;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <!-- 左侧：输入与精确计算 -->
+      <div class="left-panel">
+        <div class="section-title">精确计算</div>
+
+        <div class="input-group">
+          <label>现期量</label>
+          <input type="number" id="currentValue" placeholder="请输入现期量" />
+        </div>
+
+        <div class="input-group">
+          <label>增长率 r</label>
+          <input type="text" id="growthRate" placeholder="请输入增长率" />
+        </div>
+
+        <div class="result-box">
+          <div class="result-item">
+            <span>基期量 =</span>
+            <span id="baseResult"></span>
+          </div>
+
+          <div class="result-item">
+            <span>增长量 =</span>
+            <span id="incrementResult"></span>
+          </div>
+        </div>
+        <div class="result-box">
+          <div class="result-item">例子1：现期=1314，增长率=-4.05%</div>
+          <div class="result-item">例子2：现期=6528，增长率=8%</div>
+          <div class="result-item">例子3：现期=105.99，增长率=5.26%</div>
+        </div>
+      </div>
+
+      <!-- 右侧：假设分配法可视化 -->
+      <div class="right-panel">
+        <div class="section-title">假设分配法估算过程</div>
+
+        <div id="treeVisualization" style="display: none">
+          <div class="tree-container">
+            <!-- 第一层：现期量 -->
+            <div class="node" id="nodeCurrent">
+              <span id="displayCurrent">现期量</span>
+            </div>
+
+            <!-- 第二层：第一次拆分 -->
+            <div class="level level-1">
+              <div class="branch-lines">
+                <div class="horizontal-line"></div>
+                <div class="branch-line-left"></div>
+                <div class="branch-line-right"></div>
+              </div>
+
+              <div class="node" id="nodeBase1">
+                <div>基期拆分量1</div>
+                <div class="calculation-detail" id="calcBase1"></div>
+              </div>
+
+              <div class="node" id="nodeInc1">
+                <div>增长拆分量1</div>
+                <div class="calculation-detail" id="calcInc1"></div>
+              </div>
+            </div>
+
+            <!-- 第三层：剩余量 -->
+            <div class="level-2-wrapper">
+              <div class="node level-2" id="nodeRemain">
+                <div>当期剩余量</div>
+                <div class="calculation-detail" id="calcRemain"></div>
+              </div>
+            </div>
+
+            <!-- 第四层：第二次拆分 -->
+            <div class="level level-1" id="level2Split" style="display: none">
+              <div class="branch-lines">
+                <div class="horizontal-line"></div>
+                <div class="branch-line-left"></div>
+                <div class="branch-line-right"></div>
+              </div>
+
+              <div class="node" id="nodeBase2">
+                <div>基期拆分量2</div>
+                <div class="calculation-detail" id="calcBase2"></div>
+              </div>
+
+              <div class="node" id="nodeInc2">
+                <div>增长拆分量2</div>
+                <div class="calculation-detail" id="calcInc2"></div>
+              </div>
+            </div>
+
+            <!-- 汇总 -->
+            <div class="summary-box">
+              <div class="summary-item">
+                <div class="summary-label">估算基期量</div>
+                <div class="summary-value" id="totalBase">-</div>
+              </div>
+              <div class="summary-item">
+                <div class="summary-label">估算增长量</div>
+                <div class="summary-value" id="totalInc">-</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 提示信息 -->
+        <div id="emptyState" class="empty-state">
+          请在左侧输入现期量和增长率<br />
+          以查看假设分配法的估算过程
+        </div>
+      </div>
+    </div>
+
+    <script>
+      // 获取DOM元素
+      const currentInput = document.getElementById("currentValue");
+      const rateInput = document.getElementById("growthRate");
+
+      // 监听输入变化
+      currentInput.addEventListener("input", calculate);
+      rateInput.addEventListener("input", calculate);
+
+      // 解析输入的增长率
+      function parseRate(value) {
+        if (!value) return null;
+        const num = parseFloat(value.trim());
+        return isNaN(num) ? null : num / 100;
+      }
+
+      // 格式化数字
+      function formatNumber(num) {
+        if (Number.isInteger(num)) return num.toString();
+        return num.toFixed(2);
+      }
+
+      // 从现期量的最高位拆分（如229→200，2229→2000）
+      function getFirstSplit(current) {
+        if (current < 11) {
+          // 避免现期是个位数时，直接将现期全分给基期
+          return (
+            Number(currentInput.value) -
+            Math.ceil(parseRate(rateInput.value) * current)
+          );
+        } else {
+          const str = Math.floor(current).toString();
+          const firstDigit = parseInt(str[0]); //TODO: 处理接近的情况，比如505，1034，21003等
+          const magnitude = Math.pow(10, str.length - 1);
+          return firstDigit * magnitude;
+        }
+      }
+
+      /**
+       * 判断 (num - 最高位数值) 与 (位权/2) 的关系
+       * @param {number} num - 正整数
+       * @returns {boolean} - (num - 最高位数值) < (位权/2) 返回 true，否则 false
+       */
+      function checkHighDigit(num) {
+        if (num <= 0 || !Number.isInteger(num)) {
+          throw new Error("请输入正整数");
+        }
+      }
+      // 计算拆分
+      function calculate() {
+        const current = parseFloat(currentInput.value);
+        console.log("current:", current);
+        const rate = parseRate(rateInput.value);
+
+        const treeEl = document.getElementById("treeVisualization");
+        const emptyEl = document.getElementById("emptyState");
+
+        // 输入验证
+        if (isNaN(current) || rate === null || current === 0) {
+          treeEl.style.display = "none";
+          emptyEl.style.display = "block";
+          document.getElementById("baseResult").textContent = "-";
+          document.getElementById("incrementResult").textContent = "-";
+          return;
+        }
+
+        treeEl.style.display = "block";
+        emptyEl.style.display = "none";
+
+        // 左侧精确计算
+        const exactBase = current / (1 + rate);
+        const exactInc = current - exactBase;
+
+        document.getElementById("baseResult").textContent =
+          formatNumber(exactBase);
+        document.getElementById("incrementResult").textContent =
+          formatNumber(exactInc);
+
+        // 右侧假设分配法估算
+
+        // 第一层拆分：从现期量最高位拆分
+        const base1 = getFirstSplit(current);
+        let inc1;
+        if (current < 11) {
+          inc1 = base1 * rate; // 四舍五入取整
+        } else {
+          inc1 = Math.round(base1 * rate); // 四舍五入取整
+        }
+        const remain = current - base1 - inc1;
+
+        // 显示现期量
+        document.getElementById("displayCurrent").textContent =
+          formatNumber(current);
+
+        // 显示第一层拆分
+        document
+          .getElementById("nodeBase1")
+          .querySelector("div:first-child").textContent = `${formatNumber(
+          base1,
+        )}`;
+        document.getElementById("calcBase1").textContent = `${
+          current.toString()[0]
+        }×${Math.pow(10, current.toString().split(".")[0].length - 1)}`;
+
+        document
+          .getElementById("nodeInc1")
+          .querySelector("div:first-child").textContent = `${formatNumber(
+          inc1,
+        )}`;
+        document.getElementById("calcInc1").textContent = `${formatNumber(
+          base1 / 100,
+        )}×${rate * 100}=${inc1}`;
+
+        // 显示剩余量
+        document
+          .getElementById("nodeRemain")
+          .querySelector("div:first-child").textContent = `${formatNumber(
+          remain,
+        )}`;
+        document.getElementById("calcRemain").textContent = `${formatNumber(
+          current,
+        )}-${formatNumber(base1)}-${formatNumber(inc1)}`;
+
+        // 第二层拆分：基于剩余量的1%计算
+        const level2El = document.getElementById("level2Split");
+        let base2,
+          inc2,
+          onePercentOfRemain = 0,
+          ratePercentRounded = 0,
+          total;
+
+        if (current < 11) {
+          // 获取剩余量的十分位上的数为基期拆分量2
+          const tenthsDigit = getTenthsDigit(remain);
+          base2 = tenthsDigit * 0.1;
+          inc2 = precise(remain - base2);
+          ratePercentRounded = rateInput.value / 100; // 增长率百分数
+          onePercentOfRemain = remain / 100; // 剩余量的1%
+        } else {
+          // 增长率百分数
+          ratePercentRounded = rate * 100;
+
+          // 剩余量的1%
+          onePercentOfRemain = remain * 0.01;
+
+          // 增长拆分量2 = 四舍五入后的增长率百分数 × 剩余量的1%,此时算出的数偏大，需要修正
+          //   inc2 = Math.round(ratePercentRounded * onePercentOfRemain) - ?;
+
+          total = 100 + ratePercentRounded; // 总份数
+          inc2 = Math.floor(
+            Number((remain / total).toFixed(2)) * ratePercentRounded,
+          );
+
+          // 基期拆分量2 = 当期剩余量 - 增长拆分量2
+          base2 = remain - inc2;
+        }
+
+        level2El.style.display = "flex";
+
+        document
+          .getElementById("nodeBase2")
+          .querySelector("div:first-child").textContent = `${formatNumber(
+          base2,
+        )}`;
+        document.getElementById("calcBase2").textContent = `${formatNumber(
+          remain,
+        )}-${formatNumber(inc2)}`;
+
+        document
+          .getElementById("nodeInc2")
+          .querySelector("div:first-child").textContent = `${formatNumber(
+          inc2,
+        )}`;
+
+        document.getElementById("calcInc2").textContent = `(${remain.toFixed(
+          2,
+        )}/${total})x${ratePercentRounded}≈${inc2}`;
+
+        // 汇总
+        const totalBase = base1 + base2;
+        const totalInc = inc1 + inc2;
+
+        document.getElementById("totalBase").textContent = `${formatNumber(
+          totalBase,
+        )}=${formatNumber(base1)}${
+          base2 > 0 || base2 == 0 ? "+" : ""
+        }${formatNumber(base2)}`;
+        document.getElementById("totalInc").textContent = `${formatNumber(
+          totalInc,
+        )}=${formatNumber(inc1)}${
+          inc2 > 0 || inc2 == 0 ? "+" : ""
+        }${formatNumber(inc2)}`;
+
+        // 高亮显示差异（如果误差超过5%标红）
+        const baseDiff = Math.abs(totalBase - exactBase);
+        const incDiff = Math.abs(totalInc - exactInc);
+
+        if (baseDiff > exactBase * 0.05 || incDiff > exactInc * 0.05) {
+          document.getElementById("totalBase").style.color = "#d9534f";
+          document.getElementById("totalInc").style.color = "#d9534f";
+        } else {
+          document.getElementById("totalBase").style.color = "#333";
+          document.getElementById("totalInc").style.color = "#333";
+        }
+      }
+
+      function getTenthsDigit(num) {
+        // 取小数部分：0.73 % 1 = 0.73
+        // 乘10：0.73 * 10 = 7.3
+        // 取整：Math.floor(7.3) = 7
+        return Math.floor((Math.abs(num) % 1) * 10);
+      }
+      function precise(num, decimals = 10) {
+        return parseFloat(num.toFixed(decimals));
+      }
+    </script>
+  </body>
+</html>

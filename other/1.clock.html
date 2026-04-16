@@ -1,0 +1,3710 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>计时器</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+          "Microsoft YaHei", sans-serif;
+        background: #0f172a;
+        color: #e2e8f0;
+        height: 100vh;
+        overflow: hidden;
+        display: flex;
+      }
+
+      /* 侧边栏包装器 - 用于定位和宽度控制 */
+      .sidebar-wrapper {
+        position: relative;
+        flex-shrink: 0;
+        transition: width 0.3s ease;
+      }
+
+      .sidebar-wrapper.collapsed {
+        width: 0 !important;
+        min-width: 0 !important;
+      }
+
+      /* 左侧记录栏 */
+      .sidebar {
+        width: 100%;
+        height: 100vh;
+        background: #1e293b;
+        border-right: 1px solid #334155;
+        display: flex;
+        flex-direction: column;
+        padding: 24px 0;
+        overflow: hidden;
+      }
+
+      /* 拉伸手柄 */
+      .resize-handle {
+        position: absolute;
+        top: 0;
+        right: 0;
+        width: 4px;
+        height: 100%;
+        cursor: col-resize;
+        background: transparent;
+        transition: background 0.2s;
+        z-index: 100;
+      }
+
+      .resize-handle:hover,
+      .resize-handle.resizing {
+        background: #38bdf8;
+        box-shadow: 0 0 4px rgba(56, 189, 248, 0.5);
+      }
+
+      /* 折叠按钮 - 绝对定位在侧边栏右侧 */
+      .collapse-btn {
+        position: absolute;
+        top: 50%;
+        right: -12px;
+        transform: translateY(-50%);
+        width: 24px;
+        height: 48px;
+        background: #1e293b;
+        border: 1px solid #334155;
+        border-left: none;
+        border-radius: 0 8px 8px 0;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #94a3b8;
+        transition: all 0.2s;
+        z-index: 101;
+      }
+
+      .collapse-btn:hover {
+        background: #334155;
+        color: #f8fafc;
+      }
+
+      .collapse-btn svg {
+        transition: transform 0.3s ease;
+      }
+
+      .sidebar-wrapper.collapsed .collapse-btn svg {
+        transform: rotate(180deg);
+      }
+
+      /* 侧边栏头部 */
+      .sidebar-header {
+        padding: 0 20px 16px;
+        border-bottom: 1px solid #334155;
+        margin-bottom: 16px;
+      }
+
+      .sidebar-title {
+        font-size: 18px;
+        font-weight: 600;
+        color: #f8fafc;
+      }
+
+      .sidebar-subtitle {
+        font-size: 12px;
+        color: #94a3b8;
+        margin-top: 4px;
+      }
+
+      .sidebar-actions {
+        display: flex;
+        gap: 8px;
+        margin-top: 12px;
+      }
+
+      .sidebar-btn {
+        flex: 1;
+        padding: 8px 12px;
+        background: #334155;
+        border: none;
+        border-radius: 8px;
+        color: #e2e8f0;
+        font-size: 12px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 4px;
+      }
+
+      .sidebar-btn:hover {
+        background: #475569;
+      }
+
+      .records-list {
+        flex: 1;
+        overflow-y: auto;
+        padding: 0 12px;
+      }
+
+      /* 分组样式 */
+      .group-item {
+        margin-bottom: 8px;
+        background: #252f47;
+        border-radius: 12px;
+        overflow: hidden;
+        border: 1px solid #334155;
+        transition: all 0.2s ease;
+        position: relative;
+      }
+
+      .group-item.level-1 {
+        background: #252f47;
+      }
+
+      .group-item.level-2 {
+        background: #1e293b;
+        margin-left: 20px;
+        margin-bottom: 6px;
+        border: 1px solid #475569;
+      }
+
+      /* 分组拖拽样式 */
+      .group-item.dragging-group {
+        opacity: 0.6;
+        transform: rotate(1deg) scale(1.01);
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+        border: 2px dashed #38bdf8;
+        z-index: 100;
+      }
+
+      .group-item.drag-over-top::before,
+      .group-item.drag-over-bottom::after {
+        content: "";
+        position: absolute;
+        left: 0;
+        right: 0;
+        height: 3px;
+        background: #38bdf8;
+        border-radius: 2px;
+        z-index: 10;
+        box-shadow: 0 0 8px rgba(56, 189, 248, 0.6);
+      }
+
+      .group-item.drag-over-top::before {
+        top: -4px;
+      }
+
+      .group-item.drag-over-bottom::after {
+        bottom: -4px;
+      }
+
+      /* 分组作为拖放目标时的样式 */
+      .group-item.drag-over-as-target {
+        border-color: #8b5cf6;
+        box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.3);
+        transform: scale(1.02);
+      }
+
+      .group-item.level-1.drag-over-as-target {
+        background: #2d1f5c;
+      }
+
+      .group-item.level-2.drag-over-as-target {
+        background: #1e1640;
+      }
+
+      /* 子分组放置提示 */
+      .subgroups-container.drag-over-child {
+        border: 2px dashed #8b5cf6;
+        border-radius: 8px;
+        background: rgba(139, 92, 246, 0.1);
+        min-height: 40px;
+        position: relative;
+      }
+
+      .subgroups-container.drag-over-child::before {
+        content: "放置为子分组";
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        color: #8b5cf6;
+        font-size: 12px;
+        font-weight: 600;
+        white-space: nowrap;
+      }
+
+      .group-item.drag-over {
+        border-color: #38bdf8;
+        box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.3);
+        transform: scale(1.02);
+      }
+
+      .group-header {
+        padding: 10px 14px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        cursor: pointer;
+        transition: all 0.2s;
+        user-select: none;
+        position: relative;
+      }
+
+      .group-item.level-1 .group-header {
+        background: #1e293b;
+        padding: 12px 16px;
+      }
+
+      .group-item.level-2 .group-header {
+        background: #252f47;
+        padding: 8px 12px;
+      }
+
+      .group-header:hover {
+        filter: brightness(1.1);
+      }
+
+      /* 分组拖拽手柄 */
+      .group-drag-handle {
+        width: 20px;
+        height: 20px;
+        margin-right: 8px;
+        cursor: grab;
+        opacity: 0.4;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        transition: opacity 0.2s;
+      }
+
+      .group-drag-handle:hover {
+        opacity: 1;
+      }
+
+      .group-item.dragging-group .group-drag-handle {
+        cursor: grabbing;
+        opacity: 1;
+      }
+
+      .group-info {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex: 1;
+        min-width: 0;
+      }
+
+      .group-icon {
+        font-size: 14px;
+        transition: transform 0.3s;
+        flex-shrink: 0;
+      }
+
+      .group-item.collapsed .group-icon {
+        transform: rotate(-90deg);
+      }
+
+      .group-name {
+        font-size: 14px;
+        font-weight: 600;
+        color: #f8fafc;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .group-count {
+        font-size: 11px;
+        color: #64748b;
+        background: #0f172a;
+        padding: 2px 6px;
+        border-radius: 10px;
+        margin-left: 8px;
+        flex-shrink: 0;
+      }
+
+      .group-time {
+        font-size: 13px;
+        color: #38bdf8;
+        font-weight: 600;
+        font-variant-numeric: tabular-nums;
+        margin-right: 8px;
+        flex-shrink: 0;
+      }
+
+      .group-actions {
+        display: flex;
+        gap: 4px;
+        opacity: 0;
+        transition: opacity 0.2s;
+        flex-shrink: 0;
+      }
+
+      .group-header:hover .group-actions {
+        opacity: 1;
+      }
+
+      .group-btn {
+        width: 26px;
+        height: 26px;
+        border: none;
+        background: transparent;
+        color: #94a3b8;
+        border-radius: 6px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.2s;
+        font-size: 12px;
+      }
+
+      .group-btn:hover {
+        background: #334155;
+        color: #f8fafc;
+      }
+
+      .group-content {
+        padding: 8px;
+        transition: all 0.3s;
+        min-height: 20px;
+      }
+
+      .group-item.collapsed .group-content {
+        display: none;
+      }
+
+      .subgroups-container {
+        margin-bottom: 8px;
+        transition: all 0.2s;
+      }
+
+      .empty-group {
+        text-align: center;
+        padding: 16px;
+        color: #64748b;
+        font-size: 12px;
+        font-style: italic;
+      }
+
+      .ungrouped-section {
+        margin-bottom: 12px;
+        padding: 8px;
+        border: 2px dashed transparent;
+        border-radius: 12px;
+        transition: all 0.2s;
+      }
+
+      .ungrouped-section.drag-over {
+        border-color: #38bdf8;
+        background: rgba(56, 189, 248, 0.05);
+      }
+
+      .ungrouped-title {
+        font-size: 12px;
+        color: #64748b;
+        margin-bottom: 8px;
+        padding-left: 4px;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+      }
+
+      /* 记录项样式 */
+      .record-item {
+        background: #334155;
+        border-radius: 10px;
+        padding: 12px;
+        margin-bottom: 8px;
+        display: flex;
+        align-items: center;
+        transition: all 0.3s ease;
+        animation: slideIn 0.3s ease;
+        cursor: grab;
+        border: 2px solid transparent;
+        user-select: none;
+        position: relative;
+      }
+
+      .record-item:active {
+        cursor: grabbing;
+      }
+
+      .record-item.dragging {
+        opacity: 0.5;
+        transform: rotate(2deg) scale(1.02);
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+        z-index: 1000;
+        border-color: #38bdf8;
+      }
+
+      .record-item.drag-over-top::before,
+      .record-item.drag-over-bottom::after {
+        content: "";
+        position: absolute;
+        left: 0;
+        right: 0;
+        height: 3px;
+        background: #38bdf8;
+        border-radius: 2px;
+        z-index: 10;
+        box-shadow: 0 0 8px rgba(56, 189, 248, 0.6);
+      }
+
+      .record-item.drag-over-top::before {
+        top: -4px;
+      }
+
+      .record-item.drag-over-bottom::after {
+        bottom: -4px;
+      }
+
+      @keyframes slideIn {
+        from {
+          opacity: 0;
+          transform: translateX(-20px);
+        }
+        to {
+          opacity: 1;
+          transform: translateX(0);
+        }
+      }
+
+      .record-item:hover {
+        background: #475569;
+        transform: translateX(4px);
+      }
+
+      .record-item.selected {
+        border-color: #38bdf8;
+        background: #1e3a5f;
+      }
+
+      .drag-handle {
+        width: 20px;
+        height: 20px;
+        margin-right: 8px;
+        cursor: grab;
+        opacity: 0.5;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+      }
+
+      .drag-handle:hover {
+        opacity: 1;
+      }
+
+      .record-checkbox {
+        width: 18px;
+        height: 18px;
+        margin-right: 10px;
+        cursor: pointer;
+        accent-color: #38bdf8;
+      }
+
+      .record-info {
+        flex: 1;
+        pointer-events: none;
+        min-width: 0;
+      }
+
+      .record-name {
+        font-size: 13px;
+        font-weight: 500;
+        color: #f8fafc;
+        margin-bottom: 2px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .record-time {
+        font-size: 16px;
+        font-weight: 700;
+        color: #38bdf8;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .record-date {
+        font-size: 10px;
+        color: #94a3b8;
+        margin-top: 2px;
+      }
+
+      .record-actions {
+        display: flex;
+        gap: 6px;
+        margin-left: 6px;
+        pointer-events: auto;
+      }
+
+      .action-btn {
+        width: 28px;
+        height: 28px;
+        border: none;
+        border-radius: 6px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.2s;
+        flex-shrink: 0;
+      }
+
+      .move-btn {
+        background: #8b5cf6;
+        color: white;
+      }
+
+      .edit-btn {
+        background: #3b82f6;
+        color: white;
+      }
+
+      .delete-btn {
+        background: #ef4444;
+        color: white;
+      }
+
+      .action-btn:hover {
+        transform: scale(1.1);
+      }
+
+      /* 编辑模式 */
+      .record-item.editing {
+        background: #1e293b;
+        border-color: #3b82f6;
+        cursor: default;
+      }
+
+      .edit-form {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        pointer-events: auto;
+      }
+
+      .edit-input {
+        width: 100%;
+        padding: 6px 10px;
+        background: #0f172a;
+        border: 2px solid #3b82f6;
+        border-radius: 6px;
+        color: #f8fafc;
+        font-size: 13px;
+        outline: none;
+      }
+
+      .edit-buttons {
+        display: flex;
+        gap: 6px;
+      }
+
+      .edit-btn-small {
+        padding: 4px 10px;
+        border: none;
+        border-radius: 4px;
+        font-size: 11px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s;
+      }
+
+      .edit-save-btn {
+        background: #10b981;
+        color: white;
+      }
+
+      .edit-cancel-btn {
+        background: #64748b;
+        color: white;
+      }
+
+      .empty-state {
+        text-align: center;
+        padding: 40px 20px;
+        color: #64748b;
+      }
+
+      .empty-icon {
+        font-size: 48px;
+        margin-bottom: 12px;
+        opacity: 0.5;
+      }
+
+      /* 底部统计栏 */
+      .stats-bar {
+        padding: 16px 20px;
+        background: #0f172a;
+        border-top: 1px solid #334155;
+        margin-top: auto;
+        opacity: 0;
+        transform: translateY(20px);
+        transition: all 0.3s ease;
+        display: none;
+      }
+
+      .stats-bar.active {
+        display: block;
+        opacity: 1;
+        transform: translateY(0);
+      }
+
+      .stats-content {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+
+      .stats-label {
+        font-size: 12px;
+        color: #94a3b8;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        margin-bottom: 4px;
+      }
+
+      .stats-time {
+        font-size: 24px;
+        font-weight: 700;
+        color: #38bdf8;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .batch-delete-btn {
+        padding: 8px 16px;
+        background: #ef4444;
+        color: white;
+        border: none;
+        border-radius: 8px;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      .batch-actions {
+        display: flex;
+        gap: 8px;
+      }
+
+      .clear-selection-btn {
+        padding: 8px 16px;
+        background: #475569;
+        color: #e2e8f0;
+        border: none;
+        border-radius: 8px;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s;
+      }
+
+      /* 主计时区域 */
+      .main-content {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        position: relative;
+      }
+
+      .timer-container {
+        position: relative;
+        width: 320px;
+        height: 320px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .progress-ring {
+        position: absolute;
+        width: 100%;
+        height: 100%;
+        transform: rotate(-90deg);
+      }
+
+      .progress-ring-bg {
+        fill: none;
+        stroke: #1e293b;
+        stroke-width: 8;
+      }
+
+      .progress-ring-fill {
+        fill: none;
+        stroke: #38bdf8;
+        stroke-width: 8;
+        stroke-linecap: round;
+        stroke-dasharray: 1005;
+        stroke-dashoffset: 1005;
+        transition: stroke-dashoffset 0.1s linear;
+      }
+
+      .timer-display {
+        font-size: 64px;
+        font-weight: 700;
+        color: #f8fafc;
+        font-variant-numeric: tabular-nums;
+        letter-spacing: -2px;
+        z-index: 10;
+        text-shadow: 0 0 40px rgba(56, 189, 248, 0.3);
+      }
+
+      .timer-status {
+        margin-top: 32px;
+        font-size: 14px;
+        color: #94a3b8;
+        text-transform: uppercase;
+        letter-spacing: 2px;
+      }
+
+      .timer-status.running {
+        color: #38bdf8;
+      }
+
+      .timer-status.paused {
+        color: #fbbf24;
+      }
+
+      .instructions {
+        position: absolute;
+        bottom: 60px;
+        text-align: center;
+        color: #64748b;
+        font-size: 14px;
+        line-height: 1.8;
+      }
+
+      .key {
+        display: inline-block;
+        padding: 4px 12px;
+        background: #334155;
+        border-radius: 6px;
+        font-family: monospace;
+        font-size: 12px;
+        color: #e2e8f0;
+        margin: 0 4px;
+        border: 1px solid #475569;
+      }
+
+      /* 弹窗样式 */
+      .modal-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(15, 23, 42, 0.8);
+        backdrop-filter: blur(8px);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        opacity: 0;
+        visibility: hidden;
+        transition: all 0.3s ease;
+        z-index: 1000;
+      }
+
+      .modal-overlay.active {
+        opacity: 1;
+        visibility: visible;
+      }
+
+      .modal {
+        background: #1e293b;
+        border-radius: 20px;
+        padding: 28px;
+        width: 90%;
+        max-width: 400px;
+        border: 1px solid #334155;
+        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+        transform: scale(0.9);
+        transition: transform 0.3s ease;
+      }
+
+      .modal-overlay.active .modal {
+        transform: scale(1);
+      }
+
+      .modal-title {
+        font-size: 20px;
+        font-weight: 600;
+        margin-bottom: 8px;
+        color: #f8fafc;
+      }
+
+      .modal-subtitle {
+        font-size: 14px;
+        color: #94a3b8;
+        margin-bottom: 20px;
+      }
+
+      .time-preview {
+        font-size: 32px;
+        font-weight: 700;
+        color: #38bdf8;
+        text-align: center;
+        margin-bottom: 20px;
+        font-variant-numeric: tabular-nums;
+        background: #0f172a;
+        padding: 12px;
+        border-radius: 12px;
+      }
+
+      .input-group {
+        margin-bottom: 16px;
+      }
+
+      .input-label {
+        display: block;
+        font-size: 12px;
+        color: #94a3b8;
+        margin-bottom: 8px;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+      }
+
+      .modal-input {
+        width: 100%;
+        padding: 12px 14px;
+        background: #0f172a;
+        border: 2px solid #334155;
+        border-radius: 10px;
+        color: #f8fafc;
+        font-size: 15px;
+        outline: none;
+        transition: all 0.2s;
+      }
+
+      .modal-input:focus {
+        border-color: #38bdf8;
+        box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.1);
+      }
+
+      .modal-buttons {
+        display: flex;
+        gap: 12px;
+        margin-top: 20px;
+      }
+
+      .btn {
+        flex: 1;
+        padding: 12px 20px;
+        border: none;
+        border-radius: 10px;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s;
+      }
+
+      .btn-primary {
+        background: #38bdf8;
+        color: #0f172a;
+      }
+
+      .btn-primary:hover {
+        background: #0ea5e9;
+      }
+
+      .btn-secondary {
+        background: #334155;
+        color: #e2e8f0;
+      }
+
+      .btn-secondary:hover {
+        background: #475569;
+      }
+
+      .btn-danger {
+        background: #ef4444;
+        color: white;
+      }
+
+      /* 保存弹窗中的分组选择 */
+      .save-group-section {
+        background: #0f172a;
+        border-radius: 10px;
+        padding: 12px;
+        margin-bottom: 16px;
+      }
+
+      .save-group-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 8px;
+      }
+
+      .save-group-title {
+        font-size: 12px;
+        color: #94a3b8;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+      }
+
+      .selected-group-display {
+        font-size: 13px;
+        color: #38bdf8;
+        font-weight: 500;
+        display: flex;
+        align-items: center;
+        gap: 4px;
+      }
+
+      .group-selector-compact {
+        max-height: 200px;
+        overflow-y: auto;
+        background: #1e293b;
+        border-radius: 8px;
+        padding: 8px;
+        margin-top: 8px;
+      }
+
+      .group-option-compact {
+        display: flex;
+        align-items: center;
+        padding: 8px 10px;
+        border-radius: 6px;
+        cursor: pointer;
+        transition: all 0.2s;
+        margin-bottom: 4px;
+        font-size: 13px;
+      }
+
+      .group-option-compact:hover {
+        background: #334155;
+      }
+
+      .group-option-compact.selected {
+        background: #1e3a5f;
+        border: 1px solid #38bdf8;
+      }
+
+      .group-option-compact.level-2 {
+        margin-left: 20px;
+      }
+
+      .group-option-icon {
+        margin-right: 8px;
+        font-size: 14px;
+      }
+
+      .quick-create-group {
+        display: flex;
+        gap: 8px;
+        margin-top: 8px;
+        padding-top: 8px;
+        border-top: 1px solid #334155;
+      }
+
+      .quick-create-input {
+        flex: 1;
+        padding: 8px 12px;
+        background: #0f172a;
+        border: 1px solid #475569;
+        border-radius: 6px;
+        color: #f8fafc;
+        font-size: 13px;
+        outline: none;
+      }
+
+      .quick-create-btn {
+        padding: 8px 16px;
+        background: #10b981;
+        color: white;
+        border: none;
+        border-radius: 6px;
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s;
+        white-space: nowrap;
+      }
+
+      .quick-create-btn:hover {
+        background: #059669;
+      }
+
+      /* 分组选择弹窗 */
+      .group-tree {
+        max-height: 300px;
+        overflow-y: auto;
+        margin-bottom: 20px;
+        background: #0f172a;
+        border-radius: 10px;
+        padding: 8px;
+      }
+
+      .group-tree-item {
+        margin-bottom: 4px;
+      }
+
+      .group-tree-option {
+        display: flex;
+        align-items: center;
+        padding: 10px 12px;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: all 0.2s;
+        margin-bottom: 4px;
+      }
+
+      .group-tree-option:hover {
+        background: #1e293b;
+      }
+
+      .group-tree-option.selected {
+        background: #1e3a5f;
+        border: 1px solid #38bdf8;
+      }
+
+      .group-tree-option.level-2 {
+        margin-left: 24px;
+      }
+
+      .group-tree-icon {
+        margin-right: 8px;
+        font-size: 16px;
+      }
+
+      .group-tree-info {
+        flex: 1;
+      }
+
+      .group-tree-name {
+        font-size: 14px;
+        font-weight: 500;
+        color: #f8fafc;
+      }
+
+      .group-tree-count {
+        font-size: 11px;
+        color: #64748b;
+        margin-top: 2px;
+      }
+
+      .new-group-section {
+        background: #0f172a;
+        padding: 16px;
+        border-radius: 10px;
+        margin-bottom: 16px;
+      }
+
+      .checkbox-wrapper {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 12px;
+        cursor: pointer;
+      }
+
+      .checkbox-wrapper input[type="checkbox"] {
+        width: 18px;
+        height: 18px;
+        accent-color: #38bdf8;
+      }
+
+      .checkbox-label {
+        font-size: 13px;
+        color: #e2e8f0;
+      }
+
+      /* 提示弹窗 */
+      .toast {
+        position: fixed;
+        bottom: 30px;
+        left: 50%;
+        transform: translateX(-50%) translateY(100px);
+        background: #1e293b;
+        color: #f8fafc;
+        padding: 12px 24px;
+        border-radius: 10px;
+        border: 1px solid #334155;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+        opacity: 0;
+        transition: all 0.3s ease;
+        z-index: 2000;
+        font-size: 14px;
+      }
+
+      .toast.show {
+        transform: translateX(-50%) translateY(0);
+        opacity: 1;
+      }
+
+      .toast.success {
+        border-color: #10b981;
+        background: #064e3b;
+      }
+
+      .toast.error {
+        border-color: #ef4444;
+        background: #7f1d1d;
+      }
+
+      /* 滚动条 */
+      ::-webkit-scrollbar {
+        width: 6px;
+      }
+
+      ::-webkit-scrollbar-track {
+        background: transparent;
+      }
+
+      ::-webkit-scrollbar-thumb {
+        background: #475569;
+        border-radius: 3px;
+      }
+
+      /* 防止拖拽时选择文本 */
+      .resizing {
+        user-select: none;
+        cursor: col-resize !important;
+      }
+
+      .resizing * {
+        user-select: none;
+        pointer-events: none;
+      }
+
+      /* 拖拽提示文本 */
+      .drag-hint-text {
+        font-size: 11px;
+        color: #64748b;
+        margin-top: 4px;
+        font-style: italic;
+        display: flex;
+        align-items: center;
+        gap: 4px;
+      }
+
+      .drag-hint-text::before {
+        content: "💡";
+      }
+    </style>
+  </head>
+  <body>
+    <!-- 侧边栏包装器 -->
+    <div class="sidebar-wrapper" id="sidebarWrapper" style="width: 360px">
+      <!-- 折叠按钮 -->
+      <button class="collapse-btn" id="collapseBtn" onclick="toggleSidebar()">
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+        >
+          <polyline points="15 18 9 12 15 6"></polyline>
+        </svg>
+      </button>
+
+      <!-- 拉伸手柄 -->
+      <div class="resize-handle" id="resizeHandle"></div>
+
+      <!-- 左侧记录栏 -->
+      <aside class="sidebar">
+        <div class="sidebar-header">
+          <div class="sidebar-title">计时记录</div>
+          <div class="sidebar-subtitle">
+            拖拽记录可排序或移动分组，拖拽分组可重新排序
+          </div>
+          <div class="drag-hint-text">
+            提示：拖拽分组可调整顺序，拖放到其他分组上可成为其子分组
+          </div>
+          <div class="sidebar-actions">
+            <button class="sidebar-btn" onclick="openCreateGroupModal()">
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <path
+                  d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"
+                />
+              </svg>
+              新建分组
+            </button>
+            <button
+              class="sidebar-btn"
+              id="toggleAllBtn"
+              onclick="toggleAllGroups()"
+            >
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <polyline points="6 9 12 15 18 9" />
+              </svg>
+              <span>全部展开</span>
+            </button>
+          </div>
+        </div>
+        <div class="records-list" id="recordsList">
+          <div class="empty-state">
+            <div class="empty-icon">📝</div>
+            <div>暂无记录</div>
+            <div style="font-size: 12px; margin-top: 8px">按空格键开始计时</div>
+          </div>
+        </div>
+
+        <!-- 底部统计栏 -->
+        <div class="stats-bar" id="statsBar">
+          <div class="stats-content">
+            <div>
+              <div class="stats-label">选中记录总耗时</div>
+              <div class="stats-time" id="totalTime">00:00.00</div>
+            </div>
+            <div class="batch-actions">
+              <button
+                class="clear-selection-btn"
+                id="clearSelectionBtn"
+                title="清空选择"
+              >
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                >
+                  <path d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+              <button class="batch-delete-btn" id="batchDeleteBtn">
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                >
+                  <path
+                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                  />
+                </svg>
+                删除选中
+              </button>
+            </div>
+          </div>
+        </div>
+      </aside>
+    </div>
+
+    <!-- 主计时区域 -->
+    <main class="main-content">
+      <div class="timer-container">
+        <svg class="progress-ring" viewBox="0 0 320 320">
+          <circle class="progress-ring-bg" cx="160" cy="160" r="156" />
+          <circle
+            class="progress-ring-fill"
+            id="progressRing"
+            cx="160"
+            cy="160"
+            r="156"
+          />
+        </svg>
+        <div class="timer-display" id="timerDisplay">00:00.00</div>
+      </div>
+      <div class="timer-status" id="timerStatus">准备就绪</div>
+
+      <div class="instructions">
+        <div>按 <span class="key">Space</span> 开始 / 暂停</div>
+        <div style="margin-top: 8px">
+          计时中按 <span class="key">Enter</span> 停止并保存
+        </div>
+        <div style="margin-top: 8px">
+          按 <span class="key">Ctrl</span> +
+          <span class="key">B</span> 切换侧边栏
+        </div>
+      </div>
+    </main>
+
+    <!-- 保存记录弹窗 -->
+    <div class="modal-overlay" id="saveModal">
+      <div class="modal">
+        <div class="modal-title">保存计时记录</div>
+        <div class="modal-subtitle">为这次的计时起一个名字，并选择保存位置</div>
+        <div class="time-preview" id="timePreview">00:00.00</div>
+
+        <div class="input-group">
+          <label class="input-label">记录名称</label>
+          <input
+            type="text"
+            class="modal-input"
+            id="recordName"
+            placeholder="例如：专注阅读、运动计时..."
+            maxlength="20"
+          />
+        </div>
+
+        <div class="save-group-section">
+          <div class="save-group-header">
+            <span class="save-group-title">保存到分组</span>
+            <span class="selected-group-display" id="selectedGroupDisplay">
+              📂 未分组
+            </span>
+          </div>
+          <div class="group-selector-compact" id="saveGroupSelector"></div>
+          <div class="quick-create-group">
+            <input
+              type="text"
+              class="quick-create-input"
+              id="quickCreateGroupName"
+              placeholder="快速创建新分组..."
+              maxlength="20"
+            />
+            <button
+              class="quick-create-btn"
+              onclick="quickCreateGroupInSaveModal()"
+            >
+              创建
+            </button>
+          </div>
+        </div>
+
+        <div class="modal-buttons">
+          <button class="btn btn-secondary" id="cancelBtn">取消</button>
+          <button class="btn btn-primary" id="saveBtn">保存记录</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 移动分组弹窗 -->
+    <div class="modal-overlay" id="moveGroupModal">
+      <div class="modal">
+        <div class="modal-title">移动分组</div>
+        <div class="modal-subtitle">选择目标位置，或将其设为顶级分组</div>
+
+        <div class="new-group-section">
+          <div
+            class="checkbox-wrapper"
+            onclick="document.getElementById('moveGroupToTop').click()"
+          >
+            <input
+              type="checkbox"
+              id="moveGroupToTop"
+              onchange="toggleMoveGroupToTop()"
+            />
+            <span class="checkbox-label">设为顶级分组（移出当前父分组）</span>
+          </div>
+        </div>
+
+        <div
+          style="
+            font-size: 12px;
+            color: #64748b;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+          "
+        >
+          选择新的父分组（可选）
+        </div>
+        <div class="group-tree" id="moveGroupTree"></div>
+
+        <div class="modal-buttons">
+          <button class="btn btn-secondary" onclick="closeMoveGroupModal()">
+            取消
+          </button>
+          <button class="btn btn-primary" onclick="confirmMoveGroup()">
+            移动
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 移动记录弹窗 -->
+    <div class="modal-overlay" id="moveModal">
+      <div class="modal">
+        <div class="modal-title">移动到分组</div>
+        <div class="modal-subtitle">选择目标分组，或创建新分组</div>
+
+        <div class="new-group-section">
+          <div
+            class="checkbox-wrapper"
+            onclick="document.getElementById('createNewGroup').click()"
+          >
+            <input
+              type="checkbox"
+              id="createNewGroup"
+              onchange="toggleNewGroupInput()"
+            />
+            <span class="checkbox-label">创建新分组</span>
+          </div>
+          <div id="newGroupInputWrapper" style="display: none">
+            <input
+              type="text"
+              class="modal-input"
+              id="newGroupName"
+              placeholder="输入新分组名称..."
+              maxlength="20"
+            />
+          </div>
+        </div>
+
+        <div
+          style="
+            font-size: 12px;
+            color: #64748b;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+          "
+        >
+          选择分组
+        </div>
+        <div class="group-tree" id="groupTree"></div>
+
+        <div class="modal-buttons">
+          <button class="btn btn-secondary" onclick="closeMoveModal()">
+            取消
+          </button>
+          <button class="btn btn-primary" onclick="confirmMove()">移动</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 创建分组弹窗 -->
+    <div class="modal-overlay" id="createGroupModal">
+      <div class="modal">
+        <div class="modal-title">创建新分组</div>
+        <div class="modal-subtitle">为相关记录创建一个新的分组</div>
+        <div class="input-group">
+          <label class="input-label">分组名称</label>
+          <input
+            type="text"
+            class="modal-input"
+            id="createGroupName"
+            placeholder="例如：工作、学习、运动..."
+            maxlength="20"
+          />
+        </div>
+        <div class="input-group">
+          <label class="input-label">父分组（可选）</label>
+          <div
+            class="group-tree"
+            id="parentGroupTree"
+            style="max-height: 200px"
+          ></div>
+        </div>
+        <div class="modal-buttons">
+          <button class="btn btn-secondary" onclick="closeCreateGroupModal()">
+            取消
+          </button>
+          <button class="btn btn-primary" onclick="confirmCreateGroup()">
+            创建
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 重命名分组弹窗 -->
+    <div class="modal-overlay" id="renameGroupModal">
+      <div class="modal">
+        <div class="modal-title">重命名分组</div>
+        <div class="modal-subtitle">为分组设置一个新的名称</div>
+        <div class="input-group">
+          <label class="input-label">分组名称</label>
+          <input
+            type="text"
+            class="modal-input"
+            id="renameGroupInput"
+            placeholder="输入新的分组名称..."
+            maxlength="20"
+          />
+        </div>
+        <div class="modal-buttons">
+          <button class="btn btn-secondary" onclick="closeRenameGroupModal()">
+            取消
+          </button>
+          <button class="btn btn-primary" onclick="confirmRenameGroup()">
+            保存
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 确认弹窗 -->
+    <div class="modal-overlay" id="confirmModal">
+      <div class="modal" style="max-width: 360px">
+        <div class="modal-title" id="confirmTitle">确认操作</div>
+        <div class="modal-subtitle" id="confirmMessage">
+          确定要执行此操作吗？
+        </div>
+        <div class="modal-buttons">
+          <button class="btn btn-secondary" onclick="closeConfirmModal()">
+            取消
+          </button>
+          <button class="btn btn-danger" id="confirmBtn">确定</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Toast 提示 -->
+    <div class="toast" id="toast"></div>
+
+    <script>
+      // 状态管理
+      let startTime = 0;
+      let elapsedTime = 0;
+      let timerInterval = null;
+      let isRunning = false;
+      let isPaused = false;
+      let selectedRecords = new Set();
+      let editingRecordId = null;
+      let movingRecordId = null;
+      let renamingGroupId = null;
+      let confirmCallback = null;
+      let selectedGroupIdForSave = null;
+      let draggedRecordId = null;
+      let dragSourceGroupId = null;
+      let dragOverRecordId = null;
+      let dragPosition = null;
+
+      // 分组拖拽状态
+      let draggedGroupId = null;
+      let dragOverGroupId = null;
+      let groupDragPosition = null; // 'before', 'after', 'child'
+
+      // 移动分组弹窗状态
+      let movingGroupId = null;
+
+      // 侧边栏状态
+      let sidebarCollapsed = false;
+      let isResizing = false;
+      let sidebarWidth = 360;
+      const minSidebarWidth = 280;
+      const maxSidebarWidth = 600;
+
+      // DOM 元素
+      const timerDisplay = document.getElementById("timerDisplay");
+      const timerStatus = document.getElementById("timerStatus");
+      const progressRing = document.getElementById("progressRing");
+      const recordsList = document.getElementById("recordsList");
+      const saveModal = document.getElementById("saveModal");
+      const timePreview = document.getElementById("timePreview");
+      const recordNameInput = document.getElementById("recordName");
+      const saveBtn = document.getElementById("saveBtn");
+      const cancelBtn = document.getElementById("cancelBtn");
+      const statsBar = document.getElementById("statsBar");
+      const totalTimeDisplay = document.getElementById("totalTime");
+      const batchDeleteBtn = document.getElementById("batchDeleteBtn");
+      const clearSelectionBtn = document.getElementById("clearSelectionBtn");
+      const moveModal = document.getElementById("moveModal");
+      const moveGroupModal = document.getElementById("moveGroupModal");
+      const createGroupModal = document.getElementById("createGroupModal");
+      const renameGroupModal = document.getElementById("renameGroupModal");
+      const confirmModal = document.getElementById("confirmModal");
+      const toast = document.getElementById("toast");
+      const sidebarWrapper = document.getElementById("sidebarWrapper");
+      const resizeHandle = document.getElementById("resizeHandle");
+      const collapseBtn = document.getElementById("collapseBtn");
+
+      const circumference = 2 * Math.PI * 156;
+
+      // 初始化
+      document.addEventListener("DOMContentLoaded", () => {
+        loadRecords();
+        updateDisplay();
+        initDragAndDrop();
+        initSidebarResize();
+        loadSidebarState();
+      });
+
+      // 侧边栏状态持久化
+      function loadSidebarState() {
+        const savedWidth = localStorage.getItem("sidebarWidth");
+        const savedCollapsed = localStorage.getItem("sidebarCollapsed");
+
+        if (savedWidth) {
+          sidebarWidth = parseInt(savedWidth);
+          sidebarWrapper.style.width = sidebarWidth + "px";
+        }
+
+        if (savedCollapsed === "true") {
+          sidebarCollapsed = true;
+          sidebarWrapper.classList.add("collapsed");
+        }
+      }
+
+      function saveSidebarState() {
+        localStorage.setItem("sidebarWidth", sidebarWidth);
+        localStorage.setItem("sidebarCollapsed", sidebarCollapsed);
+      }
+
+      // 折叠/展开侧边栏
+      function toggleSidebar() {
+        sidebarCollapsed = !sidebarCollapsed;
+        if (sidebarCollapsed) {
+          sidebarWrapper.classList.add("collapsed");
+        } else {
+          sidebarWrapper.classList.remove("collapsed");
+          sidebarWrapper.style.width = sidebarWidth + "px";
+        }
+        saveSidebarState();
+      }
+
+      // 初始化侧边栏拉伸功能
+      function initSidebarResize() {
+        resizeHandle.addEventListener("mousedown", (e) => {
+          if (sidebarCollapsed) return;
+
+          isResizing = true;
+          resizeHandle.classList.add("resizing");
+          document.body.classList.add("resizing");
+
+          const startX = e.clientX;
+          const startWidth = sidebarWrapper.offsetWidth;
+
+          const handleMouseMove = (e) => {
+            if (!isResizing) return;
+
+            const diff = e.clientX - startX;
+            let newWidth = startWidth + diff;
+            newWidth = Math.max(
+              minSidebarWidth,
+              Math.min(maxSidebarWidth, newWidth),
+            );
+
+            sidebarWidth = newWidth;
+            sidebarWrapper.style.width = newWidth + "px";
+          };
+
+          const handleMouseUp = () => {
+            if (!isResizing) return;
+
+            isResizing = false;
+            resizeHandle.classList.remove("resizing");
+            document.body.classList.remove("resizing");
+            saveSidebarState();
+
+            document.removeEventListener("mousemove", handleMouseMove);
+            document.removeEventListener("mouseup", handleMouseUp);
+          };
+
+          document.addEventListener("mousemove", handleMouseMove);
+          document.addEventListener("mouseup", handleMouseUp);
+        });
+
+        resizeHandle.addEventListener("dblclick", () => {
+          if (sidebarCollapsed) return;
+          sidebarWidth = 360;
+          sidebarWrapper.style.width = sidebarWidth + "px";
+          saveSidebarState();
+        });
+      }
+
+      // 键盘控制
+      document.addEventListener("keydown", (e) => {
+        if (editingRecordId !== null) {
+          if (e.key === "Escape") cancelEdit();
+          return;
+        }
+
+        if (saveModal.classList.contains("active")) {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            saveRecord();
+          } else if (e.key === "Escape") {
+            closeModal();
+          }
+          return;
+        }
+
+        if (moveModal.classList.contains("active")) {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            confirmMove();
+          } else if (e.key === "Escape") {
+            closeMoveModal();
+          }
+          return;
+        }
+
+        if (moveGroupModal.classList.contains("active")) {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            confirmMoveGroup();
+          } else if (e.key === "Escape") {
+            closeMoveGroupModal();
+          }
+          return;
+        }
+
+        if (createGroupModal.classList.contains("active")) {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            confirmCreateGroup();
+          } else if (e.key === "Escape") {
+            closeCreateGroupModal();
+          }
+          return;
+        }
+
+        if (renameGroupModal.classList.contains("active")) {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            confirmRenameGroup();
+          } else if (e.key === "Escape") {
+            closeRenameGroupModal();
+          }
+          return;
+        }
+
+        if (confirmModal.classList.contains("active")) {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            executeConfirm();
+          } else if (e.key === "Escape") {
+            closeConfirmModal();
+          }
+          return;
+        }
+
+        if ((e.ctrlKey || e.metaKey) && e.key === "b") {
+          e.preventDefault();
+          toggleSidebar();
+          return;
+        }
+
+        if (e.code === "Space") {
+          e.preventDefault();
+          toggleTimer();
+        } else if (e.code === "Enter" && (isRunning || isPaused)) {
+          e.preventDefault();
+          stopAndSave();
+        }
+      });
+
+      // 计时器控制
+      function toggleTimer() {
+        if (!isRunning) {
+          startTimer();
+        } else {
+          pauseTimer();
+        }
+      }
+
+      function startTimer() {
+        isRunning = true;
+        isPaused = false;
+        startTime = Date.now() - elapsedTime;
+        timerStatus.textContent = "计时中";
+        timerStatus.className = "timer-status running";
+        timerInterval = setInterval(updateTimer, 10);
+      }
+
+      function pauseTimer() {
+        isRunning = false;
+        isPaused = true;
+        clearInterval(timerInterval);
+        timerStatus.textContent = "已暂停";
+        timerStatus.className = "timer-status paused";
+      }
+
+      function stopAndSave() {
+        clearInterval(timerInterval);
+        isRunning = false;
+        isPaused = false;
+        timePreview.textContent = formatTime(elapsedTime);
+        recordNameInput.value = "";
+
+        selectedGroupIdForSave = null;
+        renderSaveGroupSelector();
+        updateSelectedGroupDisplay();
+
+        saveModal.classList.add("active");
+        recordNameInput.focus();
+      }
+
+      function updateTimer() {
+        elapsedTime = Date.now() - startTime;
+        updateDisplay();
+      }
+
+      function updateDisplay() {
+        timerDisplay.textContent = formatTime(elapsedTime);
+        const seconds = (elapsedTime % 60000) / 60000;
+        const offset = circumference - seconds * circumference;
+        progressRing.style.strokeDashoffset = offset;
+      }
+
+      function formatTime(ms) {
+        const minutes = Math.floor(ms / 60000);
+        const seconds = Math.floor((ms % 60000) / 1000);
+        const centiseconds = Math.floor((ms % 1000) / 10);
+        return `${pad(minutes)}:${pad(seconds)}.${pad(centiseconds)}`;
+      }
+
+      function pad(num) {
+        return num.toString().padStart(2, "0");
+      }
+
+      // 弹窗控制
+      saveBtn.addEventListener("click", saveRecord);
+      cancelBtn.addEventListener("click", closeModal);
+      saveModal.addEventListener("click", (e) => {
+        if (e.target === saveModal) closeModal();
+      });
+
+      function closeModal() {
+        saveModal.classList.remove("active");
+        timerStatus.textContent = "准备就绪";
+        timerStatus.className = "timer-status";
+        elapsedTime = 0;
+        selectedGroupIdForSave = null;
+        updateDisplay();
+      }
+
+      function saveRecord() {
+        const name = recordNameInput.value.trim() || "未命名记录";
+
+        let records = JSON.parse(localStorage.getItem("timerRecords") || "[]");
+        const groupRecords = records.filter(
+          (r) => r.groupId === selectedGroupIdForSave,
+        );
+        const maxSort =
+          groupRecords.length > 0
+            ? Math.max(...groupRecords.map((r) => r.sort || 0))
+            : 0;
+
+        const record = {
+          id: Date.now(),
+          name: name,
+          time: elapsedTime,
+          formattedTime: formatTime(elapsedTime),
+          date: new Date().toLocaleString("zh-CN"),
+          groupId: selectedGroupIdForSave,
+          sort: maxSort + 1,
+        };
+
+        records.unshift(record);
+        localStorage.setItem("timerRecords", JSON.stringify(records));
+
+        elapsedTime = 0;
+        selectedGroupIdForSave = null;
+        closeModal();
+        loadRecords();
+
+        const groups = getGroups();
+        const groupName = selectedGroupIdForSave
+          ? groups.find((g) => g.id === selectedGroupIdForSave)?.name
+          : null;
+        showToast(
+          groupName ? `已保存到「${groupName}」` : "记录已保存",
+          "success",
+        );
+      }
+
+      function renderSaveGroupSelector() {
+        const groups = getGroups();
+        const container = document.getElementById("saveGroupSelector");
+
+        let html = `
+          <div class="group-option-compact ${selectedGroupIdForSave === null ? "selected" : ""}" 
+               onclick="selectGroupForSave(null)">
+            <span class="group-option-icon">📂</span>
+            <span>未分组</span>
+          </div>
+        `;
+
+        // 只渲染顶级分组，按sort排序
+        const level1Groups = groups
+          .filter((g) => g.parentId === null)
+          .sort((a, b) => (a.sort || 0) - (b.sort || 0));
+
+        level1Groups.forEach((group) => {
+          html += `
+            <div class="group-option-compact ${selectedGroupIdForSave === group.id ? "selected" : ""}" 
+                 onclick="selectGroupForSave(${group.id})">
+              <span class="group-option-icon">📁</span>
+              <span>${escapeHtml(group.name)}</span>
+            </div>
+          `;
+
+          // 渲染子分组，按sort排序
+          const level2Groups = groups
+            .filter((g) => g.parentId === group.id)
+            .sort((a, b) => (a.sort || 0) - (b.sort || 0));
+
+          level2Groups.forEach((childGroup) => {
+            html += `
+              <div class="group-option-compact level-2 ${selectedGroupIdForSave === childGroup.id ? "selected" : ""}" 
+                   onclick="selectGroupForSave(${childGroup.id})">
+                <span class="group-option-icon">📂</span>
+                <span>${escapeHtml(childGroup.name)}</span>
+              </div>
+            `;
+          });
+        });
+
+        container.innerHTML = html;
+      }
+
+      function selectGroupForSave(groupId) {
+        selectedGroupIdForSave = groupId;
+        renderSaveGroupSelector();
+        updateSelectedGroupDisplay();
+      }
+
+      function updateSelectedGroupDisplay() {
+        const display = document.getElementById("selectedGroupDisplay");
+        const groups = getGroups();
+
+        if (selectedGroupIdForSave === null) {
+          display.innerHTML = "📂 未分组";
+        } else {
+          const group = groups.find((g) => g.id === selectedGroupIdForSave);
+          if (group) {
+            const parent = group.parentId
+              ? groups.find((g) => g.id === group.parentId)
+              : null;
+            const prefix = parent ? `📂 ${escapeHtml(parent.name)} / ` : "📁 ";
+            display.innerHTML = `${prefix}${escapeHtml(group.name)}`;
+          } else {
+            display.innerHTML = "📂 未分组";
+            selectedGroupIdForSave = null;
+          }
+        }
+      }
+
+      function quickCreateGroupInSaveModal() {
+        const input = document.getElementById("quickCreateGroupName");
+        const name = input.value.trim();
+
+        if (!name) {
+          showToast("请输入分组名称", "error");
+          return;
+        }
+
+        const groups = getGroups();
+        const existing = groups.find(
+          (g) => g.name === name && g.parentId === null,
+        );
+        if (existing) {
+          showToast("该分组名称已存在", "error");
+          return;
+        }
+
+        const newGroup = createGroup(name);
+        input.value = "";
+        selectGroupForSave(newGroup.id);
+        renderSaveGroupSelector();
+        showToast("分组创建成功", "success");
+      }
+
+      function getGroups() {
+        return JSON.parse(localStorage.getItem("timerGroups") || "[]");
+      }
+
+      function saveGroups(groups) {
+        localStorage.setItem("timerGroups", JSON.stringify(groups));
+      }
+
+      function createGroup(name, parentId = null) {
+        const groups = getGroups();
+
+        // 计算同级别的最大sort值
+        const siblingGroups = groups.filter((g) => g.parentId === parentId);
+        const maxSort =
+          siblingGroups.length > 0
+            ? Math.max(...siblingGroups.map((g) => g.sort || 0))
+            : 0;
+
+        const group = {
+          id: Date.now(),
+          name: name,
+          parentId: parentId,
+          collapsed: false,
+          sort: maxSort + 1,
+        };
+        groups.push(group);
+        saveGroups(groups);
+        return group;
+      }
+
+      function deleteGroup(groupId) {
+        openConfirmModal(
+          "删除分组",
+          "确定要删除这个分组吗？子分组和记录将变为未分组状态。",
+          () => {
+            let groups = getGroups();
+            const group = groups.find((g) => g.id === groupId);
+
+            const getAllChildIds = (parentId) => {
+              const childIds = [];
+              const children = groups.filter((g) => g.parentId === parentId);
+              children.forEach((child) => {
+                childIds.push(child.id);
+                childIds.push(...getAllChildIds(child.id));
+              });
+              return childIds;
+            };
+
+            const idsToDelete = [groupId, ...getAllChildIds(groupId)];
+            groups = groups.filter((g) => !idsToDelete.includes(g.id));
+            saveGroups(groups);
+
+            let records = JSON.parse(
+              localStorage.getItem("timerRecords") || "[]",
+            );
+            records = records.map((r) => {
+              if (idsToDelete.includes(r.groupId)) {
+                return { ...r, groupId: null };
+              }
+              return r;
+            });
+            localStorage.setItem("timerRecords", JSON.stringify(records));
+
+            loadRecords();
+            showToast("分组已删除", "success");
+          },
+        );
+      }
+
+      function renameGroup(groupId) {
+        const groups = getGroups();
+        const group = groups.find((g) => g.id === groupId);
+        if (!group) return;
+
+        renamingGroupId = groupId;
+        document.getElementById("renameGroupInput").value = group.name;
+        renameGroupModal.classList.add("active");
+        document.getElementById("renameGroupInput").focus();
+      }
+
+      function closeRenameGroupModal() {
+        renameGroupModal.classList.remove("active");
+        renamingGroupId = null;
+      }
+
+      function confirmRenameGroup() {
+        const newName = document
+          .getElementById("renameGroupInput")
+          .value.trim();
+        if (!newName) {
+          showToast("请输入分组名称", "error");
+          return;
+        }
+
+        const groups = getGroups();
+        const group = groups.find((g) => g.id === renamingGroupId);
+        if (group) {
+          group.name = newName;
+          saveGroups(groups);
+          loadRecords();
+          showToast("分组名称已修改", "success");
+        }
+        closeRenameGroupModal();
+      }
+
+      function toggleGroupCollapse(groupId) {
+        const groups = getGroups();
+        const group = groups.find((g) => g.id === groupId);
+        if (group) {
+          group.collapsed = !group.collapsed;
+          saveGroups(groups);
+          loadRecords();
+          updateToggleAllButton();
+        }
+      }
+
+      function toggleAllGroups() {
+        const groups = getGroups();
+        const allExpanded = groups.every((g) => !g.collapsed);
+
+        groups.forEach((g) => {
+          g.collapsed = allExpanded;
+        });
+        saveGroups(groups);
+        loadRecords();
+        updateToggleAllButton();
+      }
+
+      function updateToggleAllButton() {
+        const groups = getGroups();
+        const btn = document.getElementById("toggleAllBtn");
+
+        if (!btn) return;
+
+        if (groups.length === 0) {
+          btn.innerHTML = `
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="6 9 12 15 18 9"/>
+            </svg>
+            <span>全部展开</span>
+          `;
+          return;
+        }
+
+        const allExpanded = groups.every((g) => !g.collapsed);
+
+        if (allExpanded) {
+          btn.innerHTML = `
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="18 15 12 9 6 15"/>
+            </svg>
+            <span>全部收起</span>
+          `;
+        } else {
+          btn.innerHTML = `
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="6 9 12 15 18 9"/>
+            </svg>
+            <span>全部展开</span>
+          `;
+        }
+      }
+
+      // 打开移动分组弹窗
+      function openMoveGroupModal(groupId) {
+        event.stopPropagation();
+        movingGroupId = groupId;
+
+        const groups = getGroups();
+        const movingGroup = groups.find((g) => g.id === groupId);
+
+        // 不能将自己设为自己的父分组
+        const getAllChildIds = (parentId) => {
+          const childIds = [];
+          const children = groups.filter((g) => g.parentId === parentId);
+          children.forEach((child) => {
+            childIds.push(child.id);
+            childIds.push(...getAllChildIds(child.id));
+          });
+          return childIds;
+        };
+
+        const excludedIds = [groupId, ...getAllChildIds(groupId)];
+
+        // 重置选择
+        document.getElementById("moveGroupToTop").checked = false;
+
+        renderMoveGroupTree(excludedIds, movingGroup?.parentId);
+        moveGroupModal.classList.add("active");
+      }
+
+      function renderMoveGroupTree(excludeIds, currentParentId) {
+        const groups = getGroups();
+        const container = document.getElementById("moveGroupTree");
+
+        // 只渲染可以成为父分组的分组（顶级分组）
+        let html = `
+          <div class="group-tree-option ${currentParentId === null ? "selected" : ""}" 
+               data-group-id="null" 
+               onclick="selectGroupTreeItem(this)">
+            <span class="group-tree-icon">📂</span>
+            <div class="group-tree-info">
+              <div class="group-tree-name">无（作为顶级分组）</div>
+              <div class="group-tree-count">不隶属于任何分组</div>
+            </div>
+          </div>
+        `;
+
+        const level1Groups = groups
+          .filter((g) => g.parentId === null && !excludeIds.includes(g.id))
+          .sort((a, b) => (a.sort || 0) - (b.sort || 0));
+
+        level1Groups.forEach((group) => {
+          const isSelected = currentParentId === group.id;
+          const childCount = groups.filter(
+            (g) => g.parentId === group.id,
+          ).length;
+
+          html += `
+            <div class="group-tree-option ${isSelected ? "selected" : ""}" 
+                 data-group-id="${group.id}" 
+                 onclick="selectGroupTreeItem(this)">
+              <span class="group-tree-icon">📁</span>
+              <div class="group-tree-info">
+                <div class="group-tree-name">${escapeHtml(group.name)}</div>
+                <div class="group-tree-count">作为子分组${childCount > 0 ? `，包含 ${childCount} 个子分组` : ""}</div>
+              </div>
+            </div>
+          `;
+        });
+
+        container.innerHTML = html;
+      }
+
+      function toggleMoveGroupToTop() {
+        const checkbox = document.getElementById("moveGroupToTop");
+        if (checkbox.checked) {
+          // 如果勾选设为顶级，取消所有选择
+          document
+            .querySelectorAll("#moveGroupTree .group-tree-option")
+            .forEach((el) => el.classList.remove("selected"));
+        }
+      }
+
+      function closeMoveGroupModal() {
+        moveGroupModal.classList.remove("active");
+        movingGroupId = null;
+      }
+
+      function confirmMoveGroup() {
+        const moveToTop = document.getElementById("moveGroupToTop").checked;
+        const selectedOption = document.querySelector(
+          "#moveGroupTree .group-tree-option.selected",
+        );
+
+        let newParentId = null;
+
+        if (!moveToTop && selectedOption) {
+          newParentId = selectedOption.dataset.groupId;
+          if (newParentId === "null") newParentId = null;
+          else newParentId = parseInt(newParentId);
+        }
+
+        if (movingGroupId !== null) {
+          moveGroupToNewParent(movingGroupId, newParentId);
+        }
+
+        closeMoveGroupModal();
+        loadRecords();
+      }
+
+      function moveGroupToNewParent(groupId, newParentId) {
+        const groups = getGroups();
+        const group = groups.find((g) => g.id === groupId);
+
+        if (!group || group.parentId === newParentId) return;
+
+        const oldParentId = group.parentId;
+        group.parentId = newParentId;
+
+        // 重新计算sort值
+        const siblingGroups = groups.filter(
+          (g) => g.parentId === newParentId && g.id !== groupId,
+        );
+        const maxSort =
+          siblingGroups.length > 0
+            ? Math.max(...siblingGroups.map((g) => g.sort || 0))
+            : 0;
+        group.sort = maxSort + 1;
+
+        // 重新计算原父分组的子分组sort值
+        if (oldParentId !== null) {
+          const oldSiblings = groups
+            .filter((g) => g.parentId === oldParentId)
+            .sort((a, b) => (a.sort || 0) - (b.sort || 0));
+          oldSiblings.forEach((g, index) => {
+            g.sort = index + 1;
+          });
+        }
+
+        saveGroups(groups);
+
+        const parentName = newParentId
+          ? groups.find((g) => g.id === newParentId)?.name
+          : null;
+        showToast(
+          parentName ? `已移动到「${parentName}」下` : "已设为顶级分组",
+          "success",
+        );
+      }
+
+      // 分组拖拽排序功能
+      function initGroupDragAndDrop() {
+        console.log("【分组拖拽】初始化监听器");
+
+        // 为分组添加拖拽事件监听 - 使用捕获阶段确保优先处理
+        recordsList.addEventListener("dragstart", handleGroupDragStart, true);
+        recordsList.addEventListener("dragend", handleGroupDragEnd, true);
+        recordsList.addEventListener("dragover", handleGroupDragOver, true);
+        recordsList.addEventListener("drop", handleGroupDrop, true);
+        recordsList.addEventListener("dragenter", handleGroupDragEnter, true);
+        recordsList.addEventListener("dragleave", handleGroupDragLeave, true);
+      }
+
+      function handleGroupDragStart(e) {
+        console.log("【分组拖拽】dragstart 触发", e.target);
+
+        const groupItem = e.target.closest(".group-item");
+
+        // 检查是否是从分组元素开始的拖拽
+        if (!groupItem) {
+          console.log("【分组拖拽】不是分组元素，忽略");
+          return;
+        }
+
+        // 检查是否点击了分组内的按钮或输入框
+        if (
+          e.target.closest(".group-btn") ||
+          e.target.closest("input") ||
+          e.target.closest("button")
+        ) {
+          console.log("【分组拖拽】点击了按钮，忽略");
+          e.preventDefault();
+          return;
+        }
+
+        // 阻止事件冒泡和默认行为，避免触发记录拖拽
+        e.stopPropagation();
+        e.preventDefault();
+
+        draggedGroupId = parseInt(groupItem.dataset.groupId);
+        console.log("【分组拖拽】开始拖拽分组:", draggedGroupId);
+
+        e.dataTransfer.effectAllowed = "move";
+        e.dataTransfer.setData("type", "group");
+        e.dataTransfer.setData("groupId", draggedGroupId);
+
+        // 添加拖拽样式
+        groupItem.classList.add("dragging-group");
+
+        // 设置拖拽图像
+        const rect = groupItem.getBoundingClientRect();
+        const ghost = groupItem.cloneNode(true);
+        ghost.style.width = rect.width + "px";
+        ghost.style.opacity = "0.8";
+        ghost.style.position = "absolute";
+        ghost.style.top = "-1000px";
+        document.body.appendChild(ghost);
+        e.dataTransfer.setDragImage(ghost, 20, 20);
+        setTimeout(() => document.body.removeChild(ghost), 0);
+      }
+
+      function handleGroupDragEnd(e) {
+        console.log("【分组拖拽】dragend 触发");
+
+        const groupItem = e.target.closest(".group-item");
+        if (groupItem) {
+          groupItem.classList.remove("dragging-group");
+        }
+
+        // 清除所有视觉状态
+        document
+          .querySelectorAll(
+            ".drag-over-top, .drag-over-bottom, .drag-over-as-target, .drag-over-child",
+          )
+          .forEach((el) => {
+            el.classList.remove(
+              "drag-over-top",
+              "drag-over-bottom",
+              "drag-over-as-target",
+              "drag-over-child",
+            );
+          });
+
+        draggedGroupId = null;
+        dragOverGroupId = null;
+        groupDragPosition = null;
+      }
+
+      function handleGroupDragOver(e) {
+        // 如果没有分组被拖拽，不处理
+        if (!draggedGroupId) return;
+
+        e.preventDefault();
+        e.stopPropagation();
+        e.dataTransfer.dropEffect = "move";
+
+        const groupItem = e.target.closest(".group-item");
+        const subgroupsContainer = e.target.closest(".subgroups-container");
+
+        // 清除之前的状态
+        document
+          .querySelectorAll(
+            ".group-item.drag-over-top, .group-item.drag-over-bottom, .group-item.drag-over-as-target, .subgroups-container.drag-over-child",
+          )
+          .forEach((el) => {
+            el.classList.remove(
+              "drag-over-top",
+              "drag-over-bottom",
+              "drag-over-as-target",
+              "drag-over-child",
+            );
+          });
+
+        // 检查是否是放入子分组容器
+        if (subgroupsContainer && draggedGroupId) {
+          // 检查是否可以放置为子分组
+          const parentGroupItem = subgroupsContainer.closest(".group-item");
+          const parentGroupId = parseInt(parentGroupItem?.dataset.groupId);
+
+          // 不能将自己放入自己的子分组中
+          const groups = getGroups();
+          const getAllChildIds = (parentId) => {
+            const childIds = [];
+            const children = groups.filter((g) => g.parentId === parentId);
+            children.forEach((child) => {
+              childIds.push(child.id);
+              childIds.push(...getAllChildIds(child.id));
+            });
+            return childIds;
+          };
+
+          if (
+            parentGroupId &&
+            parentGroupId !== draggedGroupId &&
+            !getAllChildIds(draggedGroupId).includes(parentGroupId)
+          ) {
+            subgroupsContainer.classList.add("drag-over-child");
+            dragOverGroupId = parentGroupId;
+            groupDragPosition = "child";
+            return;
+          }
+        }
+
+        // 检查是否悬停在其他分组上
+        if (groupItem) {
+          const targetGroupId = parseInt(groupItem.dataset.groupId);
+
+          // 不能拖放到自己身上
+          if (targetGroupId === draggedGroupId) return;
+
+          const rect = groupItem.getBoundingClientRect();
+          const height = rect.height;
+          const y = e.clientY - rect.top;
+
+          // 判断放置位置
+          if (y < height * 0.25) {
+            // 放在目标之前
+            groupItem.classList.add("drag-over-top");
+            dragOverGroupId = targetGroupId;
+            groupDragPosition = "before";
+          } else if (y > height * 0.75) {
+            // 放在目标之后
+            groupItem.classList.add("drag-over-bottom");
+            dragOverGroupId = targetGroupId;
+            groupDragPosition = "after";
+          } else {
+            // 中间区域 - 成为目标分组的子分组
+            const groups = getGroups();
+            const getAllChildIds = (parentId) => {
+              const childIds = [];
+              const children = groups.filter((g) => g.parentId === parentId);
+              children.forEach((child) => {
+                childIds.push(child.id);
+                childIds.push(...getAllChildIds(child.id));
+              });
+              return childIds;
+            };
+
+            // 检查是否会导致循环引用
+            if (!getAllChildIds(draggedGroupId).includes(targetGroupId)) {
+              groupItem.classList.add("drag-over-as-target");
+              dragOverGroupId = targetGroupId;
+              groupDragPosition = "as-child";
+            }
+          }
+        }
+      }
+
+      function handleGroupDragEnter(e) {
+        if (!draggedGroupId) return;
+        e.preventDefault();
+      }
+
+      function handleGroupDragLeave(e) {
+        if (!draggedGroupId) return;
+
+        const groupItem = e.target.closest(".group-item");
+        const subgroupsContainer = e.target.closest(".subgroups-container");
+
+        if (groupItem && !groupItem.contains(e.relatedTarget)) {
+          groupItem.classList.remove(
+            "drag-over-top",
+            "drag-over-bottom",
+            "drag-over-as-target",
+          );
+        }
+
+        if (
+          subgroupsContainer &&
+          !subgroupsContainer.contains(e.relatedTarget)
+        ) {
+          subgroupsContainer.classList.remove("drag-over-child");
+        }
+      }
+
+      function handleGroupDrop(e) {
+        if (!draggedGroupId) return;
+
+        console.log(
+          "【分组拖拽】drop 触发！",
+          draggedGroupId,
+          "目标:",
+          dragOverGroupId,
+          "位置:",
+          groupDragPosition,
+        );
+
+        e.preventDefault();
+        e.stopPropagation();
+
+        const dropType = e.dataTransfer.getData("type");
+        if (dropType !== "group") return;
+
+        const groups = getGroups();
+        const draggedGroup = groups.find((g) => g.id === draggedGroupId);
+        if (!draggedGroup) return;
+
+        // 检查是否是放入子分组容器
+        const subgroupsContainer = e.target.closest(".subgroups-container");
+        if (
+          subgroupsContainer &&
+          groupDragPosition === "child" &&
+          dragOverGroupId
+        ) {
+          // 成为子分组
+          console.log("【分组拖拽】成为子分组，父分组:", dragOverGroupId);
+          moveGroupToNewParent(draggedGroupId, dragOverGroupId);
+        } else if (dragOverGroupId && groupDragPosition) {
+          const targetGroup = groups.find((g) => g.id === dragOverGroupId);
+          if (!targetGroup) return;
+
+          // 检查循环引用
+          const getAllChildIds = (parentId) => {
+            const childIds = [];
+            const children = groups.filter((g) => g.parentId === parentId);
+            children.forEach((child) => {
+              childIds.push(child.id);
+              childIds.push(...getAllChildIds(child.id));
+            });
+            return childIds;
+          };
+
+          if (getAllChildIds(draggedGroupId).includes(dragOverGroupId)) {
+            showToast("不能将分组放入自己的子分组中", "error");
+            return;
+          }
+
+          if (groupDragPosition === "as-child") {
+            // 成为目标分组的子分组
+            console.log("【分组拖拽】成为目标分组的子分组:", dragOverGroupId);
+            moveGroupToNewParent(draggedGroupId, dragOverGroupId);
+          } else if (
+            groupDragPosition === "before" ||
+            groupDragPosition === "after"
+          ) {
+            // 同级排序
+            console.log("【分组拖拽】同级排序:", groupDragPosition);
+            reorderGroup(draggedGroupId, dragOverGroupId, groupDragPosition);
+          }
+        }
+
+        // 清除状态
+        document
+          .querySelectorAll(
+            ".dragging-group, .drag-over-top, .drag-over-bottom, .drag-over-as-target, .drag-over-child",
+          )
+          .forEach((el) => {
+            el.classList.remove(
+              "dragging-group",
+              "drag-over-top",
+              "drag-over-bottom",
+              "drag-over-as-target",
+              "drag-over-child",
+            );
+          });
+
+        draggedGroupId = null;
+        dragOverGroupId = null;
+        groupDragPosition = null;
+
+        loadRecords();
+      }
+
+      function reorderGroup(draggedId, targetId, position) {
+        const groups = getGroups();
+        const draggedGroup = groups.find((g) => g.id === draggedId);
+        const targetGroup = groups.find((g) => g.id === targetId);
+
+        if (!draggedGroup || !targetGroup) return;
+
+        // 确保在同一父分组下才能排序
+        if (draggedGroup.parentId !== targetGroup.parentId) {
+          // 如果不在同一父分组，先将 draggedGroup 移动到 targetGroup 的父分组
+          draggedGroup.parentId = targetGroup.parentId;
+        }
+
+        const parentId = targetGroup.parentId;
+        const siblings = groups
+          .filter((g) => g.parentId === parentId)
+          .sort((a, b) => (a.sort || 0) - (b.sort || 0));
+
+        // 重新排序
+        const draggedIndex = siblings.findIndex((g) => g.id === draggedId);
+        const targetIndex = siblings.findIndex((g) => g.id === targetId);
+
+        if (draggedIndex === -1 || targetIndex === -1) return;
+
+        // 从原位置移除
+        siblings.splice(draggedIndex, 1);
+
+        // 计算新位置
+        let newIndex = targetIndex;
+        if (position === "after") {
+          newIndex = targetIndex;
+          if (draggedIndex < targetIndex) {
+            newIndex = targetIndex;
+          }
+        } else {
+          newIndex = targetIndex;
+          if (draggedIndex < targetIndex) {
+            newIndex = targetIndex - 1;
+          }
+        }
+
+        // 插入到新位置
+        siblings.splice(newIndex, 0, draggedGroup);
+
+        // 重新分配 sort 值
+        siblings.forEach((g, index) => {
+          g.sort = index + 1;
+        });
+
+        saveGroups(groups);
+        showToast("分组顺序已更新", "success");
+      }
+
+      function openMoveModal(recordId) {
+        event.stopPropagation();
+        movingRecordId = recordId;
+        document.getElementById("createNewGroup").checked = false;
+        document.getElementById("newGroupInputWrapper").style.display = "none";
+        document.getElementById("newGroupName").value = "";
+
+        renderGroupTree("groupTree", null, true);
+        moveModal.classList.add("active");
+      }
+
+      function toggleNewGroupInput() {
+        const checkbox = document.getElementById("createNewGroup");
+        const wrapper = document.getElementById("newGroupInputWrapper");
+        wrapper.style.display = checkbox.checked ? "block" : "none";
+        if (checkbox.checked) {
+          document.getElementById("newGroupName").focus();
+        }
+      }
+
+      function closeMoveModal() {
+        moveModal.classList.remove("active");
+        movingRecordId = null;
+      }
+
+      function confirmMove() {
+        const createNew = document.getElementById("createNewGroup").checked;
+        const newGroupName = document
+          .getElementById("newGroupName")
+          .value.trim();
+        const selectedOption = document.querySelector(
+          "#groupTree .group-tree-option.selected",
+        );
+
+        let targetGroupId = null;
+
+        if (createNew && newGroupName) {
+          const group = createGroup(newGroupName);
+          targetGroupId = group.id;
+        } else if (selectedOption) {
+          targetGroupId = parseInt(selectedOption.dataset.groupId);
+        }
+
+        if (movingRecordId) {
+          moveRecordToGroup(movingRecordId, targetGroupId, true);
+        }
+
+        closeMoveModal();
+        loadRecords();
+      }
+
+      function openCreateGroupModal() {
+        document.getElementById("createGroupName").value = "";
+        renderParentGroupTree();
+        createGroupModal.classList.add("active");
+        document.getElementById("createGroupName").focus();
+      }
+
+      function closeCreateGroupModal() {
+        createGroupModal.classList.remove("active");
+      }
+
+      function confirmCreateGroup() {
+        const name = document.getElementById("createGroupName").value.trim();
+        if (!name) {
+          showToast("请输入分组名称", "error");
+          return;
+        }
+
+        const selectedOption = document.querySelector(
+          "#parentGroupTree .group-tree-option.selected",
+        );
+        const parentId = selectedOption
+          ? parseInt(selectedOption.dataset.groupId)
+          : null;
+
+        createGroup(name, parentId === null ? null : parentId);
+        closeCreateGroupModal();
+        loadRecords();
+        showToast("分组创建成功", "success");
+      }
+
+      function renderGroupTree(
+        containerId,
+        excludeId = null,
+        includeRoot = false,
+      ) {
+        const groups = getGroups();
+        const container = document.getElementById(containerId);
+
+        let html = "";
+
+        if (includeRoot) {
+          html += `
+            <div class="group-tree-option selected" data-group-id="null" onclick="selectGroupTreeItem(this)">
+              <span class="group-tree-icon">📂</span>
+              <div class="group-tree-info">
+                <div class="group-tree-name">未分组</div>
+                <div class="group-tree-count">不属于任何分组</div>
+              </div>
+            </div>
+          `;
+        }
+
+        // 按sort排序渲染
+        const level1Groups = groups
+          .filter((g) => g.parentId === null && g.id !== excludeId)
+          .sort((a, b) => (a.sort || 0) - (b.sort || 0));
+
+        level1Groups.forEach((group) => {
+          const childCount = groups.filter(
+            (g) => g.parentId === group.id,
+          ).length;
+          const recordCount = getRecordCountInGroup(group.id);
+
+          html += `
+            <div class="group-tree-item">
+              <div class="group-tree-option ${!includeRoot && html === "" ? "selected" : ""}" 
+                   data-group-id="${group.id}" 
+                   onclick="selectGroupTreeItem(this)">
+                <span class="group-tree-icon">📁</span>
+                <div class="group-tree-info">
+                  <div class="group-tree-name">${escapeHtml(group.name)}</div>
+                  <div class="group-tree-count">${recordCount} 条记录${childCount > 0 ? `, ${childCount} 个子分组` : ""}</div>
+                </div>
+              </div>
+          `;
+
+          const level2Groups = groups
+            .filter((g) => g.parentId === group.id && g.id !== excludeId)
+            .sort((a, b) => (a.sort || 0) - (b.sort || 0));
+
+          level2Groups.forEach((childGroup) => {
+            const childRecordCount = getRecordCountInGroup(childGroup.id);
+            html += `
+              <div class="group-tree-option level-2" 
+                   data-group-id="${childGroup.id}" 
+                   data-parent-id="${group.id}"
+                   onclick="selectGroupTreeItem(this)">
+                <span class="group-tree-icon">📂</span>
+                <div class="group-tree-info">
+                  <div class="group-tree-name">${escapeHtml(childGroup.name)}</div>
+                  <div class="group-tree-count">${childRecordCount} 条记录</div>
+                </div>
+              </div>
+            `;
+          });
+
+          html += `</div>`;
+        });
+
+        container.innerHTML =
+          html ||
+          '<div style="text-align: center; color: #64748b; padding: 20px;">暂无分组</div>';
+      }
+
+      function renderParentGroupTree() {
+        const groups = getGroups();
+        const container = document.getElementById("parentGroupTree");
+
+        let html = `
+          <div class="group-tree-option selected" data-group-id="null" onclick="selectGroupTreeItem(this)">
+            <span class="group-tree-icon">📂</span>
+            <div class="group-tree-info">
+              <div class="group-tree-name">无（创建为一级分组）</div>
+            </div>
+          </div>
+        `;
+
+        const level1Groups = groups
+          .filter((g) => g.parentId === null)
+          .sort((a, b) => (a.sort || 0) - (b.sort || 0));
+
+        level1Groups.forEach((group) => {
+          html += `
+            <div class="group-tree-option" data-group-id="${group.id}" onclick="selectGroupTreeItem(this)">
+              <span class="group-tree-icon">📁</span>
+              <div class="group-tree-info">
+                <div class="group-tree-name">${escapeHtml(group.name)}</div>
+                <div class="group-tree-count">作为子分组</div>
+              </div>
+            </div>
+          `;
+        });
+
+        container.innerHTML = html;
+      }
+
+      function selectGroupTreeItem(element) {
+        const container = element.closest(".group-tree");
+        container.querySelectorAll(".group-tree-option").forEach((el) => {
+          el.classList.remove("selected");
+        });
+        element.classList.add("selected");
+
+        // 如果选择了分组，取消"设为顶级"勾选
+        const moveToTopCheckbox = document.getElementById("moveGroupToTop");
+        if (moveToTopCheckbox) {
+          moveToTopCheckbox.checked = false;
+        }
+      }
+
+      function getRecordCountInGroup(groupId) {
+        const records = JSON.parse(
+          localStorage.getItem("timerRecords") || "[]",
+        );
+        return records.filter((r) => r.groupId === groupId).length;
+      }
+
+      function openConfirmModal(title, message, callback) {
+        document.getElementById("confirmTitle").textContent = title;
+        document.getElementById("confirmMessage").textContent = message;
+        confirmCallback = callback;
+        confirmModal.classList.add("active");
+        document.getElementById("confirmBtn").onclick = executeConfirm;
+      }
+
+      function closeConfirmModal() {
+        confirmModal.classList.remove("active");
+        confirmCallback = null;
+      }
+
+      function executeConfirm() {
+        if (confirmCallback) {
+          confirmCallback();
+          closeConfirmModal();
+        }
+      }
+
+      function showToast(message, type = "success") {
+        toast.textContent = message;
+        toast.className = `toast ${type} show`;
+        setTimeout(() => {
+          toast.classList.remove("show");
+        }, 3000);
+      }
+
+      function toggleRecordSelection(id) {
+        if (selectedRecords.has(id)) {
+          selectedRecords.delete(id);
+        } else {
+          selectedRecords.add(id);
+        }
+        loadRecords();
+        updateStatsBar();
+      }
+
+      function updateStatsBar() {
+        if (selectedRecords.size === 0) {
+          statsBar.classList.remove("active");
+          return;
+        }
+
+        const records = JSON.parse(
+          localStorage.getItem("timerRecords") || "[]",
+        );
+        let totalMs = 0;
+
+        records.forEach((record) => {
+          if (selectedRecords.has(record.id)) {
+            totalMs += record.time;
+          }
+        });
+
+        totalTimeDisplay.textContent = formatTime(totalMs);
+        statsBar.classList.add("active");
+      }
+
+      function clearSelection() {
+        selectedRecords.clear();
+        loadRecords();
+        updateStatsBar();
+      }
+
+      function deleteSelectedRecords() {
+        if (selectedRecords.size === 0) return;
+
+        openConfirmModal(
+          "删除记录",
+          `确定要删除选中的 ${selectedRecords.size} 条记录吗？此操作不可恢复。`,
+          () => {
+            let records = JSON.parse(
+              localStorage.getItem("timerRecords") || "[]",
+            );
+            records = records.filter((r) => !selectedRecords.has(r.id));
+            localStorage.setItem("timerRecords", JSON.stringify(records));
+
+            selectedRecords.clear();
+            loadRecords();
+            updateStatsBar();
+            showToast("记录已删除", "success");
+          },
+        );
+      }
+
+      function startEdit(id) {
+        event.stopPropagation();
+        editingRecordId = id;
+        loadRecords();
+
+        const input = document.getElementById(`edit-input-${id}`);
+        if (input) {
+          input.focus();
+          input.select();
+        }
+      }
+
+      function saveEdit(id) {
+        const input = document.getElementById(`edit-input-${id}`);
+        const newName = input.value.trim();
+
+        if (!newName) {
+          cancelEdit();
+          return;
+        }
+
+        let records = JSON.parse(localStorage.getItem("timerRecords") || "[]");
+        const recordIndex = records.findIndex((r) => r.id === id);
+        if (recordIndex !== -1) {
+          records[recordIndex].name = newName;
+          localStorage.setItem("timerRecords", JSON.stringify(records));
+        }
+
+        editingRecordId = null;
+        loadRecords();
+        showToast("标题已修改", "success");
+      }
+
+      function cancelEdit() {
+        editingRecordId = null;
+        loadRecords();
+      }
+
+      function initDragAndDrop() {
+        // 记录拖拽 - 使用非捕获阶段，让分组拖拽优先处理
+        recordsList.addEventListener("dragstart", handleDragStart, false);
+        recordsList.addEventListener("dragend", handleDragEnd, false);
+        recordsList.addEventListener("dragover", handleDragOver, false);
+        recordsList.addEventListener("drop", handleDrop, false);
+        recordsList.addEventListener("dragenter", handleDragEnter, false);
+        recordsList.addEventListener("dragleave", handleDragLeave, false);
+
+        // 分组拖拽 - 使用捕获阶段优先处理
+        initGroupDragAndDrop();
+      }
+
+      function handleDragStart(e) {
+        const recordItem = e.target.closest(".record-item");
+        if (!recordItem) return;
+
+        // 防止在复选框或操作按钮上触发拖拽
+        if (
+          e.target.closest(".record-checkbox") ||
+          e.target.closest(".action-btn")
+        ) {
+          e.preventDefault();
+          return;
+        }
+
+        // 如果拖拽起始点在分组内，让分组拖拽处理
+        if (e.target.closest(".group-item")) {
+          return;
+        }
+
+        draggedRecordId = parseInt(recordItem.dataset.id);
+        dragSourceGroupId = getRecordGroupId(draggedRecordId);
+
+        recordItem.classList.add("dragging");
+        e.dataTransfer.effectAllowed = "move";
+        e.dataTransfer.setData("type", "record");
+        e.dataTransfer.setData("recordId", draggedRecordId);
+      }
+
+      function handleDragEnd(e) {
+        const recordItem = e.target.closest(".record-item");
+        if (recordItem) {
+          recordItem.classList.remove("dragging");
+        }
+
+        document
+          .querySelectorAll(
+            ".drop-target, .drag-over, .drag-over-top, .drag-over-bottom",
+          )
+          .forEach((el) => {
+            el.classList.remove(
+              "drop-target",
+              "drag-over",
+              "drag-over-top",
+              "drag-over-bottom",
+            );
+          });
+
+        draggedRecordId = null;
+        dragSourceGroupId = null;
+        dragOverRecordId = null;
+        dragPosition = null;
+      }
+
+      function handleDragOver(e) {
+        // 如果正在拖拽分组，不处理记录拖拽
+        if (draggedGroupId) return;
+
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "move";
+
+        const recordItem = e.target.closest(".record-item");
+        if (
+          recordItem &&
+          draggedRecordId &&
+          parseInt(recordItem.dataset.id) !== draggedRecordId
+        ) {
+          const rect = recordItem.getBoundingClientRect();
+          const midpoint = rect.top + rect.height / 2;
+
+          document
+            .querySelectorAll(".drag-over-top, .drag-over-bottom")
+            .forEach((el) => {
+              el.classList.remove("drag-over-top", "drag-over-bottom");
+            });
+
+          if (e.clientY < midpoint) {
+            recordItem.classList.add("drag-over-top");
+            dragOverRecordId = parseInt(recordItem.dataset.id);
+            dragPosition = "before";
+          } else {
+            recordItem.classList.add("drag-over-bottom");
+            dragOverRecordId = parseInt(recordItem.dataset.id);
+            dragPosition = "after";
+          }
+        }
+      }
+
+      function handleDragEnter(e) {
+        // 如果正在拖拽分组，不处理记录拖拽
+        if (draggedGroupId) return;
+
+        e.preventDefault();
+
+        const groupItem = e.target.closest(".group-item");
+        const groupHeader = e.target.closest(".group-header");
+        const groupContent = e.target.closest(".group-content");
+        const ungroupedSection = e.target.closest(".ungrouped-section");
+
+        if (groupHeader) {
+          groupHeader.classList.add("drop-target");
+        } else if (groupContent) {
+          groupContent.classList.add("drop-target");
+        } else if (groupItem && !e.target.closest(".record-item")) {
+          groupItem.classList.add("drag-over");
+        } else if (ungroupedSection) {
+          ungroupedSection.classList.add("drag-over");
+        }
+      }
+
+      function handleDragLeave(e) {
+        // 如果正在拖拽分组，不处理记录拖拽
+        if (draggedGroupId) return;
+
+        const groupHeader = e.target.closest(".group-header");
+        const groupContent = e.target.closest(".group-content");
+        const groupItem = e.target.closest(".group-item");
+        const ungroupedSection = e.target.closest(".ungrouped-section");
+        const recordItem = e.target.closest(".record-item");
+
+        if (groupHeader && !groupHeader.contains(e.relatedTarget)) {
+          groupHeader.classList.remove("drop-target");
+        }
+        if (groupContent && !groupContent.contains(e.relatedTarget)) {
+          groupContent.classList.remove("drop-target");
+        }
+        if (groupItem && !groupItem.contains(e.relatedTarget)) {
+          groupItem.classList.remove("drag-over");
+        }
+        if (ungroupedSection && !ungroupedSection.contains(e.relatedTarget)) {
+          ungroupedSection.classList.remove("drag-over");
+        }
+        if (recordItem && !recordItem.contains(e.relatedTarget)) {
+          recordItem.classList.remove("drag-over-top", "drag-over-bottom");
+        }
+      }
+
+      function handleDrop(e) {
+        // 如果正在拖拽分组，不处理记录拖拽
+        if (draggedGroupId) return;
+
+        e.preventDefault();
+
+        const recordId = parseInt(e.dataTransfer.getData("recordId"));
+        if (!recordId) return;
+
+        let targetGroupId = null;
+        let insertBeforeId = null;
+        let insertAfterId = null;
+
+        const recordItem = e.target.closest(".record-item");
+        if (recordItem) {
+          const targetId = parseInt(recordItem.dataset.id);
+          if (targetId !== recordId) {
+            const rect = recordItem.getBoundingClientRect();
+            const midpoint = rect.top + rect.height / 2;
+
+            if (e.clientY < midpoint) {
+              insertBeforeId = targetId;
+            } else {
+              insertAfterId = targetId;
+            }
+
+            targetGroupId = getRecordGroupId(targetId);
+          }
+        } else {
+          const groupHeader = e.target.closest(".group-header");
+          const groupContent = e.target.closest(".group-content");
+          const groupItem = e.target.closest(".group-item");
+          const ungroupedSection = e.target.closest(".ungrouped-section");
+
+          if (groupHeader || groupContent || groupItem) {
+            const targetGroup = groupItem || e.target.closest(".group-item");
+            if (targetGroup) {
+              targetGroupId = parseInt(targetGroup.dataset.groupId);
+            }
+          } else if (ungroupedSection) {
+            targetGroupId = null;
+          }
+        }
+
+        if (recordId) {
+          if (insertBeforeId || insertAfterId) {
+            reorderRecord(
+              recordId,
+              targetGroupId,
+              insertBeforeId,
+              insertAfterId,
+            );
+          } else {
+            moveRecordToGroup(recordId, targetGroupId);
+          }
+        }
+
+        document
+          .querySelectorAll(
+            ".drop-target, .drag-over, .drag-over-top, .drag-over-bottom",
+          )
+          .forEach((el) => {
+            el.classList.remove(
+              "drop-target",
+              "drag-over",
+              "drag-over-top",
+              "drag-over-bottom",
+            );
+          });
+      }
+
+      function getRecordGroupId(recordId) {
+        const records = JSON.parse(
+          localStorage.getItem("timerRecords") || "[]",
+        );
+        const record = records.find((r) => r.id === recordId);
+        return record ? record.groupId : null;
+      }
+
+      function reorderRecord(
+        recordId,
+        targetGroupId,
+        insertBeforeId,
+        insertAfterId,
+      ) {
+        let records = JSON.parse(localStorage.getItem("timerRecords") || "[]");
+        const recordIndex = records.findIndex((r) => r.id === recordId);
+        if (recordIndex === -1) return;
+
+        const record = records[recordIndex];
+        const oldGroupId = record.groupId;
+
+        record.groupId = targetGroupId;
+
+        let groupRecords = records.filter(
+          (r) =>
+            (r.groupId === targetGroupId ||
+              (targetGroupId === null && !r.groupId)) &&
+            r.id !== recordId,
+        );
+
+        groupRecords.sort((a, b) => (a.sort || 0) - (b.sort || 0));
+
+        let insertIndex = groupRecords.length;
+        if (insertBeforeId) {
+          const idx = groupRecords.findIndex((r) => r.id === insertBeforeId);
+          if (idx !== -1) insertIndex = idx;
+        } else if (insertAfterId) {
+          const idx = groupRecords.findIndex((r) => r.id === insertAfterId);
+          if (idx !== -1) insertIndex = idx + 1;
+        }
+
+        groupRecords.splice(insertIndex, 0, record);
+
+        groupRecords.forEach((r, index) => {
+          r.sort = index + 1;
+        });
+
+        if (oldGroupId !== targetGroupId) {
+          const oldGroupRecords = records.filter(
+            (r) =>
+              (r.groupId === oldGroupId ||
+                (oldGroupId === null && !r.groupId)) &&
+              r.id !== recordId,
+          );
+          oldGroupRecords.sort((a, b) => (a.sort || 0) - (b.sort || 0));
+          oldGroupRecords.forEach((r, index) => {
+            r.sort = index + 1;
+          });
+        }
+
+        localStorage.setItem("timerRecords", JSON.stringify(records));
+
+        if (selectedRecords.has(recordId)) {
+          selectedRecords.delete(recordId);
+          updateStatsBar();
+        }
+
+        loadRecords();
+
+        if (oldGroupId !== targetGroupId) {
+          const groups = getGroups();
+          const groupName = targetGroupId
+            ? groups.find((g) => g.id === targetGroupId)?.name
+            : null;
+          showToast(
+            groupName ? `已移动到「${groupName}」` : "已移出分组",
+            "success",
+          );
+        }
+      }
+
+      function moveRecordToGroup(recordId, groupId, showNotification = true) {
+        let records = JSON.parse(localStorage.getItem("timerRecords") || "[]");
+        const recordIndex = records.findIndex((r) => r.id === recordId);
+
+        if (recordIndex === -1) return;
+
+        const oldGroupId = records[recordIndex].groupId;
+        if (oldGroupId === groupId) return;
+
+        records[recordIndex].groupId = groupId;
+
+        updateGroupSortValues(records, groupId);
+        if (oldGroupId !== null) {
+          updateGroupSortValues(records, oldGroupId);
+        }
+
+        localStorage.setItem("timerRecords", JSON.stringify(records));
+
+        if (selectedRecords.has(recordId)) {
+          selectedRecords.delete(recordId);
+          updateStatsBar();
+        }
+
+        loadRecords();
+
+        if (showNotification) {
+          const groups = getGroups();
+          const groupName = groupId
+            ? groups.find((g) => g.id === groupId)?.name
+            : null;
+          showToast(
+            groupName ? `已移动到「${groupName}」` : "已移出分组",
+            "success",
+          );
+        }
+      }
+
+      function updateGroupSortValues(records, groupId) {
+        let groupRecords = records.filter(
+          (r) => r.groupId === groupId || (groupId === null && !r.groupId),
+        );
+        groupRecords.sort((a, b) => (a.sort || 0) - (b.sort || 0));
+        groupRecords.forEach((r, index) => {
+          r.sort = index + 1;
+        });
+      }
+
+      function loadRecords() {
+        const records = JSON.parse(
+          localStorage.getItem("timerRecords") || "[]",
+        );
+        const groups = getGroups();
+
+        if (records.length === 0 && groups.length === 0) {
+          recordsList.innerHTML = `
+            <div class="empty-state">
+              <div class="empty-icon">📝</div>
+              <div>暂无记录</div>
+              <div style="font-size: 12px; margin-top: 8px;">按空格键开始计时</div>
+            </div>
+          `;
+          updateToggleAllButton();
+          return;
+        }
+
+        const renderGroup = (group, level) => {
+          const getAllChildGroupIds = (parentId) => {
+            let ids = [];
+            const children = groups.filter((g) => g.parentId === parentId);
+            children.forEach((child) => {
+              ids.push(child.id);
+              ids = ids.concat(getAllChildGroupIds(child.id));
+            });
+            return ids;
+          };
+
+          const childGroupIds = getAllChildGroupIds(group.id);
+          const allGroupIds = [group.id, ...childGroupIds];
+
+          let totalTime = 0;
+          let totalCount = 0;
+
+          allGroupIds.forEach((gid) => {
+            const groupRecords = records.filter((r) => r.groupId === gid);
+            totalTime += groupRecords.reduce((sum, r) => sum + r.time, 0);
+            totalCount += groupRecords.length;
+          });
+
+          // 子分组按sort排序
+          const childGroups = groups
+            .filter((g) => g.parentId === group.id)
+            .sort((a, b) => (a.sort || 0) - (b.sort || 0));
+
+          const isCollapsed = group.collapsed;
+
+          let directRecords = records.filter((r) => r.groupId === group.id);
+          directRecords.sort((a, b) => (a.sort || 0) - (b.sort || 0));
+
+          let html = `
+            <div class="group-item level-${level} ${isCollapsed ? "collapsed" : ""}" data-group-id="${group.id}" draggable="true">
+              <div class="group-header">
+                <div class="group-info">
+                  <div class="group-drag-handle" title="拖拽排序或移动分组">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <circle cx="9" cy="6" r="2"/>
+                      <circle cx="9" cy="12" r="2"/>
+                      <circle cx="9" cy="18" r="2"/>
+                      <circle cx="15" cy="6" r="2"/>
+                      <circle cx="15" cy="12" r="2"/>
+                      <circle cx="15" cy="18" r="2"/>
+                    </svg>
+                  </div>
+                  <span class="group-icon" onclick="event.stopPropagation(); toggleGroupCollapse(${group.id})">▼</span>
+                  <span class="group-name" onclick="event.stopPropagation(); toggleGroupCollapse(${group.id})">${escapeHtml(group.name)}</span>
+                  <span class="group-count" onclick="event.stopPropagation(); toggleGroupCollapse(${group.id})">${totalCount}</span>
+                </div>
+                <div style="display: flex; align-items: center;">
+                  <span class="group-time" onclick="event.stopPropagation(); toggleGroupCollapse(${group.id})">${formatTime(totalTime)}</span>
+                  <div class="group-actions" onclick="event.stopPropagation()">
+                    <button class="group-btn" onclick="openMoveGroupModal(${group.id})" title="移动分组">↔️</button>
+                    <button class="group-btn" onclick="renameGroup(${group.id})" title="重命名">✏️</button>
+                    <button class="group-btn" onclick="deleteGroup(${group.id})" title="删除分组">🗑️</button>
+                  </div>
+                </div>
+              </div>
+              <div class="group-content">
+          `;
+
+          if (childGroups.length > 0) {
+            html += `<div class="subgroups-container">`;
+            childGroups.forEach((childGroup) => {
+              html += renderGroup(childGroup, level + 1);
+            });
+            html += `</div>`;
+          }
+
+          if (directRecords.length > 0) {
+            html += directRecords
+              .map((record) => renderRecordItem(record))
+              .join("");
+          } else if (childGroups.length === 0) {
+            html += `<div class="empty-group">拖拽记录到这里</div>`;
+          }
+
+          html += `</div></div>`;
+          return html;
+        };
+
+        let html = "";
+
+        // 顶级分组按sort排序
+        const level1Groups = groups
+          .filter((g) => g.parentId === null)
+          .sort((a, b) => (a.sort || 0) - (b.sort || 0));
+
+        level1Groups.forEach((group) => {
+          html += renderGroup(group, 1);
+        });
+
+        let ungroupedRecords = records.filter(
+          (r) => !r.groupId || !groups.find((g) => g.id === r.groupId),
+        );
+        ungroupedRecords.sort((a, b) => (a.sort || 0) - (b.sort || 0));
+
+        if (ungroupedRecords.length > 0 || groups.length > 0) {
+          html += `
+            <div class="ungrouped-section" ondragover="event.preventDefault()" ondrop="handleUngroupedDrop(event)">
+              <div class="ungrouped-title">未分组 (${ungroupedRecords.length})</div>
+              ${ungroupedRecords.map((record) => renderRecordItem(record)).join("")}
+            </div>
+          `;
+        }
+
+        recordsList.innerHTML =
+          html ||
+          '<div class="empty-state"><div class="empty-icon">📁</div><div>暂无分组和记录</div></div>';
+        updateToggleAllButton();
+      }
+
+      function handleUngroupedDrop(e) {
+        e.preventDefault();
+
+        // 如果正在拖拽分组，不处理
+        if (draggedGroupId) return;
+
+        const recordId = parseInt(e.dataTransfer.getData("recordId"));
+        if (!recordId) return;
+
+        const recordItem = e.target.closest(".record-item");
+        if (recordItem) {
+          const targetId = parseInt(recordItem.dataset.id);
+          if (targetId !== recordId) {
+            const rect = recordItem.getBoundingClientRect();
+            const midpoint = rect.top + rect.height / 2;
+            let insertBeforeId = null;
+            let insertAfterId = null;
+
+            if (e.clientY < midpoint) {
+              insertBeforeId = targetId;
+            } else {
+              insertAfterId = targetId;
+            }
+
+            reorderRecord(recordId, null, insertBeforeId, insertAfterId);
+          }
+        } else {
+          moveRecordToGroup(recordId, null);
+        }
+
+        e.currentTarget.classList.remove("drag-over");
+      }
+
+      function renderRecordItem(record) {
+        const isEditing = editingRecordId === record.id;
+        const isSelected = selectedRecords.has(record.id);
+
+        if (isEditing) {
+          return `
+            <div class="record-item editing" data-id="${record.id}">
+              <div class="edit-form">
+                <input type="text" 
+                       class="edit-input" 
+                       id="edit-input-${record.id}"
+                       value="${escapeHtml(record.name)}"
+                       maxlength="20"
+                       onkeydown="handleEditKeydown(event, ${record.id})">
+                <div class="edit-buttons">
+                  <button class="edit-btn-small edit-save-btn" onclick="saveEdit(${record.id})">保存</button>
+                  <button class="edit-btn-small edit-cancel-btn" onclick="cancelEdit()">取消</button>
+                </div>
+              </div>
+            </div>
+          `;
+        } else {
+          return `
+            <div class="record-item ${isSelected ? "selected" : ""}" 
+                 data-id="${record.id}"
+                 draggable="true"
+                 onclick="handleRecordClick(event, ${record.id})">
+              <div class="drag-handle" title="拖拽排序">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="9" cy="6" r="2"/>
+                  <circle cx="9" cy="12" r="2"/>
+                  <circle cx="9" cy="18" r="2"/>
+                  <circle cx="15" cy="6" r="2"/>
+                  <circle cx="15" cy="12" r="2"/>
+                  <circle cx="15" cy="18" r="2"/>
+                </svg>
+              </div>
+              <input type="checkbox" 
+                     class="record-checkbox" 
+                     ${isSelected ? "checked" : ""}
+                     onclick="event.stopPropagation(); toggleRecordSelection(${record.id})">
+              <div class="record-info">
+                <div class="record-name">${escapeHtml(record.name)}</div>
+                <div class="record-time">${record.formattedTime}</div>
+                <div class="record-date">${record.date}</div>
+              </div>
+              <div class="record-actions">
+                <button class="action-btn move-btn" onclick="openMoveModal(${record.id})" title="移动到分组">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/>
+                  </svg>
+                </button>
+                <button class="action-btn edit-btn" onclick="startEdit(${record.id})" title="编辑标题">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"></path>
+                    <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                  </svg>
+                </button>
+                <button class="action-btn delete-btn" onclick="event.stopPropagation(); deleteRecord(${record.id})" title="删除记录">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M18 6L6 18M6 6l12 12"/>
+                  </svg>
+                </button>
+              </div>
+            </div>
+          `;
+        }
+      }
+
+      function handleEditKeydown(event, id) {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          saveEdit(id);
+        } else if (event.key === "Escape") {
+          event.preventDefault();
+          cancelEdit();
+        }
+      }
+
+      function handleRecordClick(event, id) {
+        if (editingRecordId !== null) return;
+
+        if (
+          event.target.type === "checkbox" ||
+          event.target.closest(".action-btn") ||
+          event.target.closest(".record-actions") ||
+          event.target.closest(".drag-handle")
+        ) {
+          return;
+        }
+        toggleRecordSelection(id);
+      }
+
+      function deleteRecord(id) {
+        openConfirmModal(
+          "删除记录",
+          "确定要删除这条记录吗？此操作不可恢复。",
+          () => {
+            let records = JSON.parse(
+              localStorage.getItem("timerRecords") || "[]",
+            );
+            records = records.filter((r) => r.id !== id);
+            localStorage.setItem("timerRecords", JSON.stringify(records));
+
+            if (selectedRecords.has(id)) {
+              selectedRecords.delete(id);
+              updateStatsBar();
+            }
+
+            loadRecords();
+            showToast("记录已删除", "success");
+          },
+        );
+      }
+
+      function escapeHtml(text) {
+        const div = document.createElement("div");
+        div.textContent = text;
+        return div.innerHTML;
+      }
+
+      batchDeleteBtn.addEventListener("click", deleteSelectedRecords);
+      clearSelectionBtn.addEventListener("click", clearSelection);
+
+      [
+        moveModal,
+        moveGroupModal,
+        createGroupModal,
+        renameGroupModal,
+        confirmModal,
+      ].forEach((modal) => {
+        modal.addEventListener("click", (e) => {
+          if (e.target === modal) {
+            if (modal === moveModal) closeMoveModal();
+            else if (modal === moveGroupModal) closeMoveGroupModal();
+            else if (modal === createGroupModal) closeCreateGroupModal();
+            else if (modal === renameGroupModal) closeRenameGroupModal();
+            else if (modal === confirmModal) closeConfirmModal();
+          }
+        });
+      });
+
+      // 暴露函数到全局
+      window.deleteRecord = deleteRecord;
+      window.toggleRecordSelection = toggleRecordSelection;
+      window.handleRecordClick = handleRecordClick;
+      window.startEdit = startEdit;
+      window.saveEdit = saveEdit;
+      window.cancelEdit = cancelEdit;
+      window.handleEditKeydown = handleEditKeydown;
+      window.openMoveModal = openMoveModal;
+      window.closeMoveModal = closeMoveModal;
+      window.confirmMove = confirmMove;
+      window.toggleNewGroupInput = toggleNewGroupInput;
+      window.selectGroupTreeItem = selectGroupTreeItem;
+      window.openCreateGroupModal = openCreateGroupModal;
+      window.closeCreateGroupModal = closeCreateGroupModal;
+      window.confirmCreateGroup = confirmCreateGroup;
+      window.toggleGroupCollapse = toggleGroupCollapse;
+      window.toggleAllGroups = toggleAllGroups;
+      window.deleteGroup = deleteGroup;
+      window.renameGroup = renameGroup;
+      window.closeRenameGroupModal = closeRenameGroupModal;
+      window.confirmRenameGroup = confirmRenameGroup;
+      window.closeConfirmModal = closeConfirmModal;
+      window.executeConfirm = executeConfirm;
+      window.selectGroupForSave = selectGroupForSave;
+      window.quickCreateGroupInSaveModal = quickCreateGroupInSaveModal;
+      window.handleUngroupedDrop = handleUngroupedDrop;
+      window.toggleSidebar = toggleSidebar;
+      window.openMoveGroupModal = openMoveGroupModal;
+      window.closeMoveGroupModal = closeMoveGroupModal;
+      window.confirmMoveGroup = confirmMoveGroup;
+      window.toggleMoveGroupToTop = toggleMoveGroupToTop;
+    </script>
+  </body>
+</html>
