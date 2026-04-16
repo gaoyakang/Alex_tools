@@ -1,0 +1,623 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>我的工具箱 | My Toolbox</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      :root {
+        --primary: #6366f1;
+        --primary-dark: #4f46e5;
+        --secondary: #ec4899;
+        --bg: #0f172a;
+        --surface: #1e293b;
+        --surface-light: #334155;
+        --text: #f8fafc;
+        --text-muted: #94a3b8;
+        --border: #334155;
+        --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+        --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.4);
+        --sidebar-width: 260px;
+      }
+
+      body {
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          "Helvetica Neue", Arial, sans-serif;
+        background: var(--bg);
+        color: var(--text);
+        min-height: 100vh;
+        line-height: 1.6;
+      }
+
+      /* 顶部栏 - 仅包含菜单按钮 */
+      .top-bar {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 60px;
+        background: var(--surface);
+        border-bottom: 1px solid var(--border);
+        display: flex;
+        align-items: center;
+        padding: 0 1rem;
+        z-index: 1000;
+      }
+
+      /* 菜单切换按钮 */
+      .menu-toggle {
+        width: 40px;
+        height: 40px;
+        background: transparent;
+        border: none;
+        cursor: pointer;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        gap: 5px;
+        padding: 0;
+        border-radius: 8px;
+        transition: background 0.2s;
+      }
+
+      .menu-toggle:hover {
+        background: var(--surface-light);
+      }
+
+      .menu-toggle span {
+        display: block;
+        width: 24px;
+        height: 2px;
+        background: var(--text);
+        border-radius: 2px;
+        transition: all 0.3s ease;
+      }
+
+      .menu-toggle.active span:nth-child(1) {
+        transform: rotate(45deg) translate(5px, 5px);
+      }
+
+      .menu-toggle.active span:nth-child(2) {
+        opacity: 0;
+      }
+
+      .menu-toggle.active span:nth-child(3) {
+        transform: rotate(-45deg) translate(5px, -5px);
+      }
+
+      /* 标题 */
+      .top-title {
+        margin-left: 1rem;
+        font-size: 1.25rem;
+        font-weight: 700;
+        background: linear-gradient(
+          135deg,
+          var(--primary) 0%,
+          var(--secondary) 100%
+        );
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+      }
+
+      /* 遮罩层 */
+      .overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.5);
+        opacity: 0;
+        visibility: hidden;
+        transition: all 0.3s ease;
+        z-index: 998;
+      }
+
+      .overlay.active {
+        opacity: 1;
+        visibility: visible;
+      }
+
+      /* 侧边栏 */
+      .sidebar {
+        position: fixed;
+        left: 0;
+        width: var(--sidebar-width);
+        height: calc(100vh);
+        background: var(--surface);
+        border-right: 1px solid var(--border);
+        overflow-y: auto;
+        z-index: 999;
+        transition: transform 0.3s ease;
+      }
+
+      /* 移动端侧边栏默认隐藏 */
+      @media (max-width: 768px) {
+        .sidebar {
+          transform: translateX(-100%);
+          box-shadow: var(--shadow-lg);
+        }
+
+        .sidebar.active {
+          transform: translateX(0);
+        }
+      }
+
+      /* PC 端始终显示 */
+      @media (min-width: 769px) {
+        .menu-toggle {
+          display: none;
+        }
+
+        .top-title {
+          margin-left: 0;
+        }
+
+        .overlay {
+          display: none;
+        }
+      }
+
+      /* 分类导航内容 */
+      .category-nav {
+        padding: 1rem;
+      }
+
+      .nav-title {
+        font-size: 0.75rem;
+        font-weight: 600;
+        color: var(--text-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        margin-bottom: 1rem;
+        padding: 0 0.5rem;
+      }
+
+      .nav-item {
+        display: block;
+        padding: 0.875rem 1rem;
+        color: var(--text-muted);
+        text-decoration: none;
+        border-radius: 8px;
+        transition: all 0.2s;
+        cursor: pointer;
+        margin-bottom: 0.25rem;
+        font-size: 0.95rem;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+
+      .nav-item:hover {
+        background: var(--surface-light);
+        color: var(--text);
+      }
+
+      .nav-item.active {
+        background: linear-gradient(
+          135deg,
+          var(--primary) 0%,
+          var(--primary-dark) 100%
+        );
+        color: white;
+      }
+
+      .nav-count {
+        background: var(--bg);
+        padding: 0.125rem 0.5rem;
+        border-radius: 12px;
+        font-size: 0.75rem;
+        font-weight: 600;
+      }
+
+      .nav-item.active .nav-count {
+        background: rgba(255, 255, 255, 0.2);
+      }
+
+      /* 主内容区 */
+      .main-content {
+        margin-left: 0;
+        padding: 80px 1rem 2rem;
+        min-height: 100vh;
+        max-width: 1400px;
+      }
+
+      /* PC 端为主内容区留出侧边栏空间 */
+      @media (min-width: 769px) {
+        .main-content {
+          margin-left: var(--sidebar-width);
+          padding: 2rem;
+        }
+
+        .top-bar {
+          left: var(--sidebar-width);
+          width: calc(100% - var(--sidebar-width));
+          background: transparent;
+          border-bottom: none;
+        }
+      }
+
+      /* 工具网格 */
+      .tools-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+        gap: 1rem;
+      }
+
+      @media (max-width: 640px) {
+        .tools-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      .tool-card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 1.5rem;
+        text-decoration: none;
+        color: var(--text);
+        transition: all 0.3s ease;
+        position: relative;
+        overflow: hidden;
+        cursor: pointer;
+      }
+
+      .tool-card::before {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 3px;
+        background: linear-gradient(
+          90deg,
+          var(--primary) 0%,
+          var(--secondary) 100%
+        );
+        transform: scaleX(0);
+        transition: transform 0.3s ease;
+      }
+
+      .tool-card:hover {
+        transform: translateY(-2px);
+        box-shadow: var(--shadow-lg);
+        border-color: var(--primary);
+      }
+
+      .tool-card:hover::before {
+        transform: scaleX(1);
+      }
+
+      .tool-icon {
+        width: 48px;
+        height: 48px;
+        background: linear-gradient(
+          135deg,
+          var(--primary) 0%,
+          var(--secondary) 100%
+        );
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.5rem;
+        margin-bottom: 1rem;
+      }
+
+      .tool-name {
+        font-size: 1.125rem;
+        font-weight: 600;
+        margin-bottom: 0.5rem;
+      }
+
+      .tool-desc {
+        color: var(--text-muted);
+        font-size: 0.875rem;
+        line-height: 1.5;
+      }
+
+      .tool-tag {
+        display: inline-block;
+        margin-top: 0.75rem;
+        padding: 0.25rem 0.75rem;
+        background: var(--bg);
+        border-radius: 20px;
+        font-size: 0.75rem;
+        color: var(--text-muted);
+        border: 1px solid var(--border);
+      }
+
+      /* 分类区块 */
+      .category-section {
+        margin-bottom: 3rem;
+      }
+
+      .category-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 1.5rem;
+        padding-bottom: 0.75rem;
+        border-bottom: 1px solid var(--border);
+      }
+
+      .category-name {
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: var(--text);
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+      }
+
+      .category-count {
+        color: var(--text-muted);
+        font-size: 0.875rem;
+      }
+
+      /* 空状态 */
+      .empty-state {
+        text-align: center;
+        padding: 4rem 2rem;
+        color: var(--text-muted);
+      }
+
+      .empty-state-icon {
+        font-size: 3rem;
+        margin-bottom: 1rem;
+        opacity: 0.5;
+      }
+
+      /* 动画 */
+      @keyframes fadeIn {
+        from {
+          opacity: 0;
+          transform: translateY(10px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      .tool-card,
+      .category-section {
+        animation: fadeIn 0.3s ease forwards;
+      }
+
+      /* 滚动条 */
+      ::-webkit-scrollbar {
+        width: 6px;
+        height: 6px;
+      }
+
+      ::-webkit-scrollbar-track {
+        background: var(--bg);
+      }
+
+      ::-webkit-scrollbar-thumb {
+        background: var(--surface-light);
+        border-radius: 3px;
+      }
+
+      ::-webkit-scrollbar-thumb:hover {
+        background: var(--primary);
+      }
+    </style>
+  </head>
+  <body>
+    <!-- 遮罩层 -->
+    <div class="overlay" id="overlay" onclick="toggleSidebar()"></div>
+
+    <!-- 顶部栏 -->
+    <div class="top-bar">
+      <button class="menu-toggle" id="menuToggle" onclick="toggleSidebar()">
+        <span></span>
+        <span></span>
+        <span></span>
+      </button>
+    </div>
+
+    <!-- 侧边栏 -->
+    <aside class="sidebar" id="sidebar">
+      <nav class="category-nav">
+        <div class="nav-title">工具分类</div>
+        <a
+          class="nav-item active"
+          data-category="all"
+          onclick="filterCategory('all')"
+        >
+          <span>全部工具</span>
+          <span class="nav-count" id="count-all">0</span>
+        </a>
+        <div id="categoryList"></div>
+      </nav>
+    </aside>
+
+    <!-- 主内容区 -->
+    <main class="main-content" id="mainContent">
+      <!-- 动态生成工具卡片 -->
+    </main>
+
+    <script>
+      // 工具配置
+      const tools = [
+        {
+          id: "har2code",
+          name: "HAR转代码",
+          desc: "将HAR文件转换为可执行的代码片段，支持多种语言",
+          icon: "📋",
+          category: "开发工具",
+          file: "./code/1.har2code.html",
+          tags: ["HTTP", "转换", "开发"],
+        },
+        {
+          id: "shoot",
+          name: "射击小游戏",
+          desc: "完全自己控制的射击小游戏",
+          icon: "📋",
+          category: "游戏",
+          file: "./games/1.shoot.html",
+          tags: ["射击小游戏", "配置自控"],
+        },
+      ];
+
+      let currentCategory = "all";
+
+      // 初始化
+      document.addEventListener("DOMContentLoaded", () => {
+        renderCategories();
+        renderTools();
+        updateCounts();
+      });
+
+      // 切换侧边栏
+      function toggleSidebar() {
+        const sidebar = document.getElementById("sidebar");
+        const overlay = document.getElementById("overlay");
+        const toggle = document.getElementById("menuToggle");
+
+        sidebar.classList.toggle("active");
+        overlay.classList.toggle("active");
+        toggle.classList.toggle("active");
+      }
+
+      // 关闭侧边栏（在移动端点击菜单项后自动关闭）
+      function closeSidebarOnMobile() {
+        if (window.innerWidth <= 768) {
+          toggleSidebar();
+        }
+      }
+
+      // 渲染分类
+      function renderCategories() {
+        const categories = [...new Set(tools.map((t) => t.category))];
+        const container = document.getElementById("categoryList");
+
+        categories.forEach((cat) => {
+          const count = tools.filter((t) => t.category === cat).length;
+          const item = document.createElement("a");
+          item.className = "nav-item";
+          item.dataset.category = cat;
+          item.onclick = () => {
+            filterCategory(cat);
+            closeSidebarOnMobile();
+          };
+          item.innerHTML = `
+                    <span>${cat}</span>
+                    <span class="nav-count">${count}</span>
+                `;
+          container.appendChild(item);
+        });
+      }
+
+      // 渲染工具
+      function renderTools() {
+        const container = document.getElementById("mainContent");
+        container.innerHTML = "";
+
+        let filtered =
+          currentCategory === "all"
+            ? tools
+            : tools.filter((t) => t.category === currentCategory);
+
+        // 按分类分组
+        const categories = [...new Set(filtered.map((t) => t.category))];
+        categories.forEach((cat, idx) => {
+          const catTools = filtered.filter((t) => t.category === cat);
+          const section = createCategorySection(cat, catTools, idx);
+          container.appendChild(section);
+        });
+
+        if (filtered.length === 0) {
+          container.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon">📭</div>
+                        <h3>该分类下暂无工具</h3>
+                    </div>
+                `;
+        }
+      }
+
+      function createCategorySection(category, catTools, idx) {
+        const section = document.createElement("div");
+        section.className = "category-section";
+        section.style.animationDelay = `${idx * 0.1}s`;
+
+        section.innerHTML = `
+                <div class="category-header">
+                    <h2 class="category-name">
+                        <span>${getCategoryIcon(category)}</span>
+                        ${category}
+                    </h2>
+                    <span class="category-count">${catTools.length} 个工具</span>
+                </div>
+                <div class="tools-grid">
+                    ${catTools.map((tool, tidx) => createToolCardHTML(tool, tidx)).join("")}
+                </div>
+            `;
+
+        return section;
+      }
+
+      function createToolCardHTML(tool, idx) {
+        return `
+                <a href="${tool.file}" class="tool-card" style="animation-delay: ${idx * 0.05}s">
+                    <div class="tool-icon">${tool.icon}</div>
+                    <div class="tool-name">${tool.name}</div>
+                    <div class="tool-desc">${tool.desc}</div>
+                    <div style="margin-top: 0.75rem;">
+                        ${tool.tags.map((tag) => `<span class="tool-tag">${tag}</span>`).join("")}
+                    </div>
+                </a>
+            `;
+      }
+
+      function getCategoryIcon(category) {
+        const icons = {
+          开发工具: "💻",
+          加密编码: "🔐",
+          设计工具: "🎨",
+          文本处理: "📝",
+          网络工具: "🌐",
+          其他: "📦",
+        };
+        return icons[category] || "📦";
+      }
+
+      function filterCategory(category) {
+        currentCategory = category;
+
+        document.querySelectorAll(".nav-item").forEach((item) => {
+          item.classList.toggle("active", item.dataset.category === category);
+        });
+
+        renderTools();
+      }
+
+      function updateCounts() {
+        document.getElementById("count-all").textContent = tools.length;
+      }
+
+      // ESC 关闭侧边栏
+      document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") {
+          const sidebar = document.getElementById("sidebar");
+          if (sidebar.classList.contains("active")) {
+            toggleSidebar();
+          }
+        }
+      });
+    </script>
+  </body>
+</html>
