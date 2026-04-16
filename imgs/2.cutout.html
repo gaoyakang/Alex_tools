@@ -1,0 +1,1023 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>智能抠图工具</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family:
+          "Segoe UI",
+          system-ui,
+          -apple-system,
+          sans-serif;
+        background: linear-gradient(
+          135deg,
+          #0f172a 0%,
+          #1e293b 50%,
+          #0f172a 100%
+        );
+        min-height: 100vh;
+        color: #fff;
+        overflow-x: hidden;
+      }
+
+      .container {
+        max-width: 1400px;
+        margin: 0 auto;
+        padding: 20px;
+      }
+
+      h1 {
+        text-align: center;
+        font-size: 2.5rem;
+        margin-bottom: 10px;
+        background: linear-gradient(90deg, #60a5fa, #38bdf8, #22d3ee);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        text-shadow: 0 0 30px rgba(56, 189, 248, 0.3);
+      }
+
+      .subtitle {
+        text-align: center;
+        color: #94a3b8;
+        margin-bottom: 30px;
+        font-size: 1rem;
+      }
+
+      .upload-area {
+        border: 3px dashed rgba(56, 189, 248, 0.5);
+        border-radius: 20px;
+        padding: 60px 40px;
+        text-align: center;
+        background: rgba(255, 255, 255, 0.03);
+        backdrop-filter: blur(10px);
+        transition: all 0.3s ease;
+        cursor: pointer;
+        position: relative;
+        overflow: hidden;
+      }
+
+      .upload-area::before {
+        content: "";
+        position: absolute;
+        top: -50%;
+        left: -50%;
+        width: 200%;
+        height: 200%;
+        background: radial-gradient(
+          circle,
+          rgba(56, 189, 248, 0.1) 0%,
+          transparent 70%
+        );
+        animation: pulse 4s ease-in-out infinite;
+      }
+
+      @keyframes pulse {
+        0%,
+        100% {
+          transform: scale(1);
+          opacity: 0.5;
+        }
+        50% {
+          transform: scale(1.1);
+          opacity: 0.8;
+        }
+      }
+
+      .upload-area:hover {
+        border-color: #38bdf8;
+        background: rgba(56, 189, 248, 0.08);
+        transform: translateY(-2px);
+        box-shadow: 0 20px 40px rgba(56, 189, 248, 0.2);
+      }
+
+      .upload-area.dragover {
+        border-color: #22d3ee;
+        background: rgba(34, 211, 238, 0.1);
+      }
+
+      .upload-icon {
+        font-size: 4rem;
+        margin-bottom: 20px;
+        display: block;
+      }
+
+      .upload-text {
+        font-size: 1.3rem;
+        margin-bottom: 10px;
+        color: #fff;
+      }
+
+      .upload-hint {
+        color: #64748b;
+        font-size: 0.9rem;
+      }
+
+      #fileInput {
+        display: none;
+      }
+
+      .editor-section {
+        display: none;
+        margin-top: 30px;
+      }
+
+      .toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 15px;
+        justify-content: center;
+        margin-bottom: 20px;
+        padding: 20px;
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 15px;
+        backdrop-filter: blur(10px);
+      }
+
+      .tool-group {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 15px;
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 10px;
+      }
+
+      .tool-label {
+        font-size: 0.85rem;
+        color: #94a3b8;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+      }
+
+      button {
+        padding: 10px 20px;
+        border: none;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 0.95rem;
+        transition: all 0.3s ease;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-weight: 500;
+      }
+
+      .btn-primary {
+        background: linear-gradient(135deg, #3b82f6, #2563eb);
+        color: white;
+      }
+
+      .btn-primary:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 10px 25px rgba(59, 130, 246, 0.4);
+      }
+
+      .btn-secondary {
+        background: rgba(255, 255, 255, 0.1);
+        color: #fff;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+      }
+
+      .btn-secondary:hover {
+        background: rgba(255, 255, 255, 0.2);
+      }
+
+      .btn-active {
+        background: #38bdf8 !important;
+        color: #0f172a !important;
+        box-shadow: 0 0 15px rgba(56, 189, 248, 0.5);
+      }
+
+      input[type="range"] {
+        width: 120px;
+        height: 6px;
+        -webkit-appearance: none;
+        background: rgba(255, 255, 255, 0.2);
+        border-radius: 3px;
+        outline: none;
+      }
+
+      input[type="range"]::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        width: 18px;
+        height: 18px;
+        background: #3b82f6;
+        border-radius: 50%;
+        cursor: pointer;
+        transition: all 0.3s;
+      }
+
+      input[type="range"]::-webkit-slider-thumb:hover {
+        transform: scale(1.2);
+        box-shadow: 0 0 10px rgba(59, 130, 246, 0.5);
+      }
+
+      .canvas-container {
+        display: flex;
+        gap: 30px;
+        justify-content: center;
+        flex-wrap: wrap;
+      }
+
+      .canvas-wrapper {
+        position: relative;
+        background: rgba(255, 255, 255, 0.03);
+        border-radius: 15px;
+        padding: 20px;
+        backdrop-filter: blur(10px);
+      }
+
+      .canvas-title {
+        text-align: center;
+        margin-bottom: 15px;
+        font-size: 1rem;
+        color: #94a3b8;
+      }
+
+      canvas {
+        border-radius: 10px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+        max-width: 100%;
+        background:
+          linear-gradient(45deg, #1e293b 25%, transparent 25%),
+          linear-gradient(-45deg, #1e293b 25%, transparent 25%),
+          linear-gradient(45deg, transparent 75%, #1e293b 75%),
+          linear-gradient(-45deg, transparent 75%, #1e293b 75%);
+        background-size: 20px 20px;
+        background-position:
+          0 0,
+          0 10px,
+          10px -10px,
+          -10px 0px;
+        background-color: #0f172a;
+      }
+
+      #sourceCanvas {
+        cursor: crosshair;
+      }
+
+      #sourceCanvas.pen-mode {
+        cursor: pointer;
+      }
+
+      .result-section {
+        display: none;
+        margin-top: 30px;
+        text-align: center;
+      }
+
+      .save-options {
+        display: flex;
+        gap: 15px;
+        justify-content: center;
+        margin-top: 20px;
+        flex-wrap: wrap;
+      }
+
+      select {
+        padding: 10px 20px;
+        border-radius: 8px;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        background: rgba(255, 255, 255, 0.1);
+        color: #fff;
+        font-size: 1rem;
+        cursor: pointer;
+      }
+
+      select option {
+        background: #0f172a;
+        color: #fff;
+      }
+
+      .instructions {
+        background: rgba(56, 189, 248, 0.1);
+        border-left: 4px solid #38bdf8;
+        padding: 15px 20px;
+        border-radius: 0 10px 10px 0;
+        margin-bottom: 20px;
+      }
+
+      .instructions h3 {
+        color: #38bdf8;
+        margin-bottom: 10px;
+      }
+
+      .instructions ul {
+        list-style: none;
+        padding-left: 0;
+      }
+
+      .instructions li {
+        padding: 5px 0;
+        color: #cbd5e1;
+      }
+
+      .instructions li::before {
+        content: "▸ ";
+        color: #38bdf8;
+      }
+
+      .zoom-controls {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .zoom-value {
+        min-width: 50px;
+        text-align: center;
+        font-weight: bold;
+        color: #3b82f6;
+      }
+
+      .mode-indicator {
+        display: inline-block;
+        padding: 5px 15px;
+        background: rgba(56, 189, 248, 0.2);
+        border-radius: 20px;
+        font-size: 0.85rem;
+        color: #38bdf8;
+        margin-left: 10px;
+      }
+
+      .pen-point {
+        position: absolute;
+        width: 10px;
+        height: 10px;
+        background: #38bdf8;
+        border: 2px solid #fff;
+        border-radius: 50%;
+        transform: translate(-50%, -50%);
+        pointer-events: none;
+        z-index: 10;
+        box-shadow: 0 0 10px rgba(56, 189, 248, 0.8);
+      }
+
+      .pen-line {
+        position: absolute;
+        background: #38bdf8;
+        height: 2px;
+        transform-origin: left center;
+        pointer-events: none;
+        z-index: 9;
+        box-shadow: 0 0 5px rgba(56, 189, 248, 0.5);
+      }
+
+      @media (max-width: 768px) {
+        h1 {
+          font-size: 1.8rem;
+        }
+        .toolbar {
+          flex-direction: column;
+          align-items: stretch;
+        }
+        .tool-group {
+          justify-content: center;
+        }
+        .canvas-container {
+          flex-direction: column;
+        }
+      }
+    </style>
+    <base target="_blank" />
+  </head>
+  <body>
+    <div class="container">
+      <h1>✨ 智能抠图工具</h1>
+      <p class="subtitle">手绘或钢笔工具选择区域，精准抠出你想要的图像</p>
+
+      <div class="upload-area" id="uploadArea">
+        <span class="upload-icon">📁</span>
+        <p class="upload-text">点击或拖拽上传图片</p>
+        <p class="upload-hint">支持 JPG、PNG、WebP 格式</p>
+        <input type="file" id="fileInput" accept="image/*" />
+      </div>
+
+      <div class="editor-section" id="editorSection">
+        <div class="instructions">
+          <h3>🎨 使用说明</h3>
+          <ul>
+            <li><strong>手绘模式</strong>：按住鼠标自由绘制闭合区域</li>
+            <li>
+              <strong>钢笔模式</strong
+              >：点击创建锚点，自动连接成线，双击或点击起点闭合
+            </li>
+            <li>点击<strong>「完成选区」</strong>自动生成抠图结果</li>
+          </ul>
+        </div>
+
+        <div class="toolbar">
+          <div class="tool-group">
+            <span class="tool-label">选择模式</span>
+            <button class="btn-active" id="brushBtn" onclick="setMode('brush')">
+              🖌️ 手绘
+            </button>
+            <button class="btn-secondary" id="penBtn" onclick="setMode('pen')">
+              ✒️ 钢笔
+            </button>
+            <span class="mode-indicator" id="modeIndicator"
+              >当前：手绘模式</span
+            >
+          </div>
+
+          <div class="tool-group" id="brushControls">
+            <span class="tool-label">画笔大小</span>
+            <input type="range" id="brushSize" min="2" max="50" value="5" />
+            <span id="brushValue">5px</span>
+          </div>
+
+          <div class="tool-group">
+            <span class="tool-label">缩放</span>
+            <div class="zoom-controls">
+              <button class="btn-secondary" onclick="adjustZoom(-0.1)">
+                −
+              </button>
+              <span class="zoom-value" id="zoomValue">100%</span>
+              <button class="btn-secondary" onclick="adjustZoom(0.1)">+</button>
+            </div>
+          </div>
+
+          <div class="tool-group">
+            <button class="btn-secondary" onclick="undoLast()">↩️ 撤销</button>
+            <button class="btn-secondary" onclick="clearCanvas()">
+              🗑️ 清空
+            </button>
+          </div>
+
+          <div class="tool-group">
+            <button class="btn-primary" onclick="completeSelection()">
+              ✅ 完成选区
+            </button>
+          </div>
+        </div>
+
+        <div class="canvas-container">
+          <div class="canvas-wrapper" id="sourceWrapper">
+            <p class="canvas-title">
+              📷 原图 - <span id="modeText">按住鼠标绘制</span>
+            </p>
+            <canvas id="sourceCanvas"></canvas>
+          </div>
+          <div class="canvas-wrapper">
+            <p class="canvas-title">🎯 抠图结果</p>
+            <canvas id="resultCanvas"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <div class="result-section" id="resultSection">
+        <div class="save-options">
+          <select id="formatSelect">
+            <option value="png">PNG (透明背景)</option>
+            <option value="jpeg">JPG (白色背景)</option>
+          </select>
+          <select id="qualitySelect">
+            <option value="1">最高质量</option>
+            <option value="0.9">高质量</option>
+            <option value="0.8">中等质量</option>
+          </select>
+          <button class="btn-primary" onclick="downloadImage()">
+            💾 保存图片
+          </button>
+          <button class="btn-secondary" onclick="resetTool()">
+            🔄 重新开始
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      let sourceCanvas, resultCanvas;
+      let sourceCtx, resultCtx;
+      let originalImage = null;
+      let isDrawing = false;
+      let currentMode = "brush"; // 'brush' 或 'pen'
+      let currentPath = [];
+      let allPaths = [];
+      let zoom = 1;
+      let canvasScale = 1;
+
+      // 钢笔模式专用
+      let penPoints = [];
+      let tempPenPath = [];
+      let isPenDrawing = false;
+
+      const uploadArea = document.getElementById("uploadArea");
+      const fileInput = document.getElementById("fileInput");
+      const editorSection = document.getElementById("editorSection");
+      const resultSection = document.getElementById("resultSection");
+      const brushSizeInput = document.getElementById("brushSize");
+      const brushValue = document.getElementById("brushValue");
+      const brushBtn = document.getElementById("brushBtn");
+      const penBtn = document.getElementById("penBtn");
+      const modeIndicator = document.getElementById("modeIndicator");
+      const modeText = document.getElementById("modeText");
+      const brushControls = document.getElementById("brushControls");
+      const sourceWrapper = document.getElementById("sourceWrapper");
+
+      // 初始化
+      uploadArea.addEventListener("click", () => fileInput.click());
+
+      uploadArea.addEventListener("dragover", (e) => {
+        e.preventDefault();
+        uploadArea.classList.add("dragover");
+      });
+
+      uploadArea.addEventListener("dragleave", () => {
+        uploadArea.classList.remove("dragover");
+      });
+
+      uploadArea.addEventListener("drop", (e) => {
+        e.preventDefault();
+        uploadArea.classList.remove("dragover");
+        const file = e.dataTransfer.files[0];
+        if (file && file.type.startsWith("image/")) {
+          loadImage(file);
+        }
+      });
+
+      fileInput.addEventListener("change", (e) => {
+        const file = e.target.files[0];
+        if (file) loadImage(file);
+      });
+
+      brushSizeInput.addEventListener("input", (e) => {
+        brushValue.textContent = e.target.value + "px";
+      });
+
+      function setMode(mode) {
+        currentMode = mode;
+        if (mode === "brush") {
+          brushBtn.classList.add("btn-active");
+          brushBtn.classList.remove("btn-secondary");
+          penBtn.classList.remove("btn-active");
+          penBtn.classList.add("btn-secondary");
+          modeIndicator.textContent = "当前：手绘模式";
+          modeText.textContent = "按住鼠标绘制";
+          brushControls.style.display = "flex";
+          sourceCanvas.classList.remove("pen-mode");
+        } else {
+          penBtn.classList.add("btn-active");
+          penBtn.classList.remove("btn-secondary");
+          brushBtn.classList.remove("btn-active");
+          brushBtn.classList.add("btn-secondary");
+          modeIndicator.textContent = "当前：钢笔模式";
+          modeText.textContent = "点击创建锚点，双击/点击起点闭合";
+          brushControls.style.display = "none";
+          sourceCanvas.classList.add("pen-mode");
+        }
+        // 清除临时钢笔状态
+        penPoints = [];
+        tempPenPath = [];
+        isPenDrawing = false;
+        clearPenOverlay();
+        drawSourceImage();
+      }
+
+      function loadImage(file) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          originalImage = new Image();
+          originalImage.onload = () => {
+            initCanvases();
+            uploadArea.style.display = "none";
+            editorSection.style.display = "block";
+            resultSection.style.display = "block";
+          };
+          originalImage.src = e.target.result;
+        };
+        reader.readAsDataURL(file);
+      }
+
+      function initCanvases() {
+        sourceCanvas = document.getElementById("sourceCanvas");
+        resultCanvas = document.getElementById("resultCanvas");
+        sourceCtx = sourceCanvas.getContext("2d");
+        resultCtx = resultCanvas.getContext("2d");
+
+        // 计算合适的画布尺寸（最大800px）
+        const maxSize = 800;
+        let width = originalImage.width;
+        let height = originalImage.height;
+
+        if (width > maxSize || height > maxSize) {
+          const ratio = Math.min(maxSize / width, maxSize / height);
+          width *= ratio;
+          height *= ratio;
+          canvasScale = ratio;
+        }
+
+        sourceCanvas.width = width;
+        sourceCanvas.height = height;
+        resultCanvas.width = width;
+        resultCanvas.height = height;
+
+        drawSourceImage();
+        setupDrawing();
+      }
+
+      function drawSourceImage() {
+        sourceCtx.clearRect(0, 0, sourceCanvas.width, sourceCanvas.height);
+        sourceCtx.drawImage(
+          originalImage,
+          0,
+          0,
+          sourceCanvas.width,
+          sourceCanvas.height,
+        );
+
+        // 绘制已保存的路径
+        sourceCtx.strokeStyle = "#38bdf8";
+        sourceCtx.lineWidth = parseInt(brushSizeInput.value);
+        sourceCtx.lineCap = "round";
+        sourceCtx.lineJoin = "round";
+
+        allPaths.forEach((path) => {
+          if (path.length > 1) {
+            sourceCtx.beginPath();
+            sourceCtx.moveTo(path[0].x, path[0].y);
+            for (let i = 1; i < path.length; i++) {
+              sourceCtx.lineTo(path[i].x, path[i].y);
+            }
+            sourceCtx.stroke();
+            // 绘制锚点
+            path.forEach((point, index) => {
+              if (index % 10 === 0 || index === path.length - 1) {
+                sourceCtx.fillStyle = "#38bdf8";
+                sourceCtx.beginPath();
+                sourceCtx.arc(point.x, point.y, 3, 0, Math.PI * 2);
+                sourceCtx.fill();
+              }
+            });
+          }
+        });
+
+        // 绘制当前路径（手绘模式）
+        if (currentMode === "brush" && currentPath.length > 1) {
+          sourceCtx.beginPath();
+          sourceCtx.moveTo(currentPath[0].x, currentPath[0].y);
+          for (let i = 1; i < currentPath.length; i++) {
+            sourceCtx.lineTo(currentPath[i].x, currentPath[i].y);
+          }
+          sourceCtx.stroke();
+        }
+
+        // 绘制临时钢笔路径
+        if (currentMode === "pen" && tempPenPath.length > 1) {
+          sourceCtx.strokeStyle = "#22d3ee";
+          sourceCtx.setLineDash([5, 5]);
+          sourceCtx.beginPath();
+          sourceCtx.moveTo(tempPenPath[0].x, tempPenPath[0].y);
+          for (let i = 1; i < tempPenPath.length; i++) {
+            sourceCtx.lineTo(tempPenPath[i].x, tempPenPath[i].y);
+          }
+          sourceCtx.stroke();
+          sourceCtx.setLineDash([]);
+        }
+      }
+
+      function setupDrawing() {
+        let lastX, lastY;
+
+        sourceCanvas.addEventListener("mousedown", (e) => {
+          const rect = sourceCanvas.getBoundingClientRect();
+          const x = (e.clientX - rect.left) * (sourceCanvas.width / rect.width);
+          const y =
+            (e.clientY - rect.top) * (sourceCanvas.height / rect.height);
+
+          if (currentMode === "brush") {
+            isDrawing = true;
+            currentPath = [{ x, y }];
+            lastX = x;
+            lastY = y;
+          } else if (currentMode === "pen") {
+            // 钢笔模式：点击创建锚点
+            if (penPoints.length > 0) {
+              const firstPoint = penPoints[0];
+              const distToFirst = Math.sqrt(
+                (x - firstPoint.x) ** 2 + (y - firstPoint.y) ** 2,
+              );
+
+              // 如果点击靠近第一个点，闭合路径
+              if (distToFirst < 20 && penPoints.length > 2) {
+                tempPenPath.push({ x: firstPoint.x, y: firstPoint.y });
+                allPaths.push([...tempPenPath]);
+                penPoints = [];
+                tempPenPath = [];
+                clearPenOverlay();
+                drawSourceImage();
+                return;
+              }
+            }
+
+            penPoints.push({ x, y });
+            if (tempPenPath.length === 0) {
+              tempPenPath.push({ x, y });
+            } else {
+              // 使用直线连接
+              const lastPoint = tempPenPath[tempPenPath.length - 1];
+              tempPenPath.push({ x, y });
+            }
+
+            updatePenOverlay();
+            drawSourceImage();
+          }
+        });
+
+        sourceCanvas.addEventListener("mousemove", (e) => {
+          if (currentMode !== "brush" || !isDrawing) return;
+
+          const rect = sourceCanvas.getBoundingClientRect();
+          const x = (e.clientX - rect.left) * (sourceCanvas.width / rect.width);
+          const y =
+            (e.clientY - rect.top) * (sourceCanvas.height / rect.height);
+
+          currentPath.push({ x, y });
+
+          sourceCtx.strokeStyle = "#38bdf8";
+          sourceCtx.lineWidth = parseInt(brushSizeInput.value);
+          sourceCtx.lineCap = "round";
+          sourceCtx.lineJoin = "round";
+          sourceCtx.beginPath();
+          sourceCtx.moveTo(lastX, lastY);
+          sourceCtx.lineTo(x, y);
+          sourceCtx.stroke();
+
+          lastX = x;
+          lastY = y;
+        });
+
+        sourceCanvas.addEventListener("mouseup", () => {
+          if (currentMode === "brush") {
+            if (isDrawing && currentPath.length > 2) {
+              // 自动闭合路径
+              currentPath.push(currentPath[0]);
+              allPaths.push([...currentPath]);
+              currentPath = [];
+              drawSourceImage();
+            }
+            isDrawing = false;
+          }
+        });
+
+        sourceCanvas.addEventListener("mouseleave", () => {
+          if (currentMode === "brush") {
+            isDrawing = false;
+          }
+        });
+
+        // 双击闭合钢笔路径
+        sourceCanvas.addEventListener("dblclick", (e) => {
+          if (currentMode === "pen" && penPoints.length > 2) {
+            const firstPoint = penPoints[0];
+            tempPenPath.push({ x: firstPoint.x, y: firstPoint.y });
+            allPaths.push([...tempPenPath]);
+            penPoints = [];
+            tempPenPath = [];
+            clearPenOverlay();
+            drawSourceImage();
+          }
+        });
+
+        // 触摸支持
+        sourceCanvas.addEventListener("touchstart", (e) => {
+          e.preventDefault();
+          const touch = e.touches[0];
+          const rect = sourceCanvas.getBoundingClientRect();
+          const mouseEvent = new MouseEvent("mousedown", {
+            clientX: touch.clientX,
+            clientY: touch.clientY,
+          });
+          sourceCanvas.dispatchEvent(mouseEvent);
+        });
+
+        sourceCanvas.addEventListener("touchmove", (e) => {
+          e.preventDefault();
+          const touch = e.touches[0];
+          const mouseEvent = new MouseEvent("mousemove", {
+            clientX: touch.clientX,
+            clientY: touch.clientY,
+          });
+          sourceCanvas.dispatchEvent(mouseEvent);
+        });
+
+        sourceCanvas.addEventListener("touchend", (e) => {
+          const mouseEvent = new MouseEvent("mouseup", {});
+          sourceCanvas.dispatchEvent(mouseEvent);
+        });
+      }
+
+      function updatePenOverlay() {
+        clearPenOverlay();
+
+        const rect = sourceCanvas.getBoundingClientRect();
+
+        // 绘制锚点
+        penPoints.forEach((point, index) => {
+          const pointEl = document.createElement("div");
+          pointEl.className = "pen-point";
+          const screenX =
+            rect.left + point.x * (rect.width / sourceCanvas.width);
+          const screenY =
+            rect.top + point.y * (rect.height / sourceCanvas.height);
+          pointEl.style.left = screenX + "px";
+          pointEl.style.top = screenY + "px";
+          if (index === 0) {
+            pointEl.style.background = "#22d3ee";
+            pointEl.style.width = "14px";
+            pointEl.style.height = "14px";
+          }
+          document.body.appendChild(pointEl);
+        });
+
+        // 绘制连线
+        for (let i = 0; i < penPoints.length - 1; i++) {
+          const lineEl = document.createElement("div");
+          lineEl.className = "pen-line";
+          const p1 = penPoints[i];
+          const p2 = penPoints[i + 1];
+          const screenX1 = rect.left + p1.x * (rect.width / sourceCanvas.width);
+          const screenY1 =
+            rect.top + p1.y * (rect.height / sourceCanvas.height);
+          const screenX2 = rect.left + p2.x * (rect.width / sourceCanvas.width);
+          const screenY2 =
+            rect.top + p2.y * (rect.height / sourceCanvas.height);
+
+          const length = Math.sqrt(
+            (screenX2 - screenX1) ** 2 + (screenY2 - screenY1) ** 2,
+          );
+          const angle =
+            (Math.atan2(screenY2 - screenY1, screenX2 - screenX1) * 180) /
+            Math.PI;
+
+          lineEl.style.width = length + "px";
+          lineEl.style.left = screenX1 + "px";
+          lineEl.style.top = screenY1 + "px";
+          lineEl.style.transform = `rotate(${angle}deg)`;
+
+          document.body.appendChild(lineEl);
+        }
+      }
+
+      function clearPenOverlay() {
+        document
+          .querySelectorAll(".pen-point, .pen-line")
+          .forEach((el) => el.remove());
+      }
+
+      function undoLast() {
+        if (allPaths.length > 0) {
+          allPaths.pop();
+          drawSourceImage();
+        }
+      }
+
+      function clearCanvas() {
+        allPaths = [];
+        currentPath = [];
+        penPoints = [];
+        tempPenPath = [];
+        clearPenOverlay();
+        drawSourceImage();
+        resultCtx.clearRect(0, 0, resultCanvas.width, resultCanvas.height);
+      }
+
+      function adjustZoom(delta) {
+        zoom = Math.max(0.5, Math.min(3, zoom + delta));
+        document.getElementById("zoomValue").textContent =
+          Math.round(zoom * 100) + "%";
+        sourceCanvas.style.transform = `scale(${zoom})`;
+        sourceCanvas.style.transformOrigin = "center center";
+        // 缩放后更新钢笔覆盖层位置
+        if (currentMode === "pen" && penPoints.length > 0) {
+          setTimeout(updatePenOverlay, 300);
+        }
+      }
+
+      function completeSelection() {
+        if (allPaths.length === 0) {
+          alert("请先绘制选区！");
+          return;
+        }
+
+        // 创建遮罩
+        const maskCanvas = document.createElement("canvas");
+        maskCanvas.width = sourceCanvas.width;
+        maskCanvas.height = sourceCanvas.height;
+        const maskCtx = maskCanvas.getContext("2d");
+
+        // 填充所有路径区域
+        maskCtx.fillStyle = "white";
+        allPaths.forEach((path) => {
+          if (path.length > 2) {
+            maskCtx.beginPath();
+            maskCtx.moveTo(path[0].x, path[0].y);
+            for (let i = 1; i < path.length; i++) {
+              maskCtx.lineTo(path[i].x, path[i].y);
+            }
+            maskCtx.closePath();
+            maskCtx.fill();
+          }
+        });
+
+        // 获取遮罩数据
+        const maskData = maskCtx.getImageData(
+          0,
+          0,
+          maskCanvas.width,
+          maskCanvas.height,
+        );
+        const sourceData = sourceCtx.getImageData(
+          0,
+          0,
+          sourceCanvas.width,
+          sourceCanvas.height,
+        );
+        const resultData = resultCtx.createImageData(
+          sourceCanvas.width,
+          sourceCanvas.height,
+        );
+
+        // 应用遮罩
+        for (let i = 0; i < maskData.data.length; i += 4) {
+          const maskAlpha = maskData.data[i];
+          if (maskAlpha > 128) {
+            resultData.data[i] = sourceData.data[i];
+            resultData.data[i + 1] = sourceData.data[i + 1];
+            resultData.data[i + 2] = sourceData.data[i + 2];
+            resultData.data[i + 3] = sourceData.data[i + 3];
+          } else {
+            resultData.data[i] = 0;
+            resultData.data[i + 1] = 0;
+            resultData.data[i + 2] = 0;
+            resultData.data[i + 3] = 0;
+          }
+        }
+
+        resultCtx.putImageData(resultData, 0, 0);
+
+        // 添加成功动画效果
+        resultCanvas.style.animation = "none";
+        setTimeout(() => {
+          resultCanvas.style.animation = "pulse 0.5s ease";
+        }, 10);
+      }
+
+      function downloadImage() {
+        const format = document.getElementById("formatSelect").value;
+        const quality = parseFloat(
+          document.getElementById("qualitySelect").value,
+        );
+
+        const downloadCanvas = document.createElement("canvas");
+        downloadCanvas.width = originalImage.width;
+        downloadCanvas.height = originalImage.height;
+        const downloadCtx = downloadCanvas.getContext("2d");
+
+        if (format === "jpeg") {
+          downloadCtx.fillStyle = "white";
+          downloadCtx.fillRect(
+            0,
+            0,
+            downloadCanvas.width,
+            downloadCanvas.height,
+          );
+        }
+
+        downloadCtx.drawImage(
+          resultCanvas,
+          0,
+          0,
+          downloadCanvas.width,
+          downloadCanvas.height,
+        );
+
+        const link = document.createElement("a");
+        const timestamp = new Date().getTime();
+        link.download = `cutout_${timestamp}.${format === "jpeg" ? "jpg" : "png"}`;
+        link.href = downloadCanvas.toDataURL(`image/${format}`, quality);
+        link.click();
+      }
+
+      function resetTool() {
+        location.reload();
+      }
+
+      // 窗口大小改变时更新钢笔覆盖层
+      window.addEventListener("resize", () => {
+        if (currentMode === "pen" && penPoints.length > 0) {
+          updatePenOverlay();
+        }
+      });
+    </script>
+  </body>
+</html>

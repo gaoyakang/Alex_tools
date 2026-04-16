@@ -1,0 +1,946 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, user-scalable=yes"
+    />
+    <title>PDF批量转图片工具</title>
+    <!-- pdf.js 核心库 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+    <!-- JSZip 和 FileSaver -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+    <style>
+      * {
+        box-sizing: border-box;
+        font-family: system-ui, "Segoe UI", "Roboto", "Noto Sans", sans-serif;
+      }
+
+      body {
+        background: #f1f5f9;
+        margin: 0;
+        padding: 24px 20px;
+        color: #0f172a;
+      }
+
+      .container {
+        max-width: 1600px;
+        margin: 0 auto;
+      }
+
+      /* 头部区域 */
+      .header {
+        background: white;
+        border-radius: 28px;
+        padding: 24px 32px;
+        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.03);
+        margin-bottom: 32px;
+        border: 1px solid #e2e8f0;
+      }
+
+      h1 {
+        font-size: 1.9rem;
+        font-weight: 700;
+        margin: 0 0 6px 0;
+        background: linear-gradient(135deg, #1e293b, #2c3e66);
+        background-clip: text;
+        -webkit-background-clip: text;
+        color: transparent;
+      }
+
+      .sub {
+        color: #475569;
+        margin-bottom: 24px;
+        border-left: 3px solid #3b82f6;
+        padding-left: 14px;
+        font-size: 0.95rem;
+      }
+
+      .upload-area {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 16px;
+        align-items: center;
+        justify-content: space-between;
+        margin-top: 8px;
+      }
+
+      .file-input-wrapper {
+        position: relative;
+        display: inline-block;
+      }
+
+      .file-label {
+        background: #1e293b;
+        color: white;
+        padding: 10px 24px;
+        border-radius: 40px;
+        font-weight: 500;
+        font-size: 0.9rem;
+        cursor: pointer;
+        transition: 0.2s;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        border: none;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+      }
+
+      .file-label:hover {
+        background: #0f172a;
+        transform: translateY(-1px);
+      }
+
+      input[type="file"] {
+        position: absolute;
+        opacity: 0;
+        width: 0;
+        height: 0;
+      }
+
+      .action-buttons {
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
+        align-items: center;
+      }
+
+      .format-selector {
+        background: #f8fafc;
+        border: 1px solid #cbd5e1;
+        border-radius: 40px;
+        padding: 4px 12px;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 0.85rem;
+        font-weight: 500;
+      }
+      .format-selector select {
+        border: none;
+        background: transparent;
+        font-weight: 600;
+        padding: 6px 4px;
+        outline: none;
+        cursor: pointer;
+      }
+
+      .btn {
+        padding: 10px 22px;
+        border-radius: 40px;
+        border: none;
+        font-weight: 600;
+        font-size: 0.85rem;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        background: white;
+        border: 1px solid #cbd5e1;
+        color: #1e293b;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .btn-primary {
+        background: #3b82f6;
+        border: none;
+        color: white;
+        box-shadow: 0 1px 3px rgba(59, 130, 246, 0.3);
+      }
+
+      .btn-primary:hover {
+        background: #2563eb;
+        transform: translateY(-1px);
+      }
+
+      .btn-outline {
+        border: 1px solid #cbd5e1;
+        background: white;
+      }
+
+      .btn-outline:hover {
+        background: #f8fafc;
+        border-color: #94a3b8;
+      }
+
+      .btn-danger {
+        background: #fee2e2;
+        border-color: #fecaca;
+        color: #b91c1c;
+      }
+
+      .btn-danger:hover {
+        background: #fecaca;
+      }
+
+      button:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+        transform: none;
+      }
+
+      /* 文件卡片列表 */
+      .files-grid {
+        display: flex;
+        flex-direction: column;
+        gap: 28px;
+      }
+
+      .pdf-card {
+        background: white;
+        border-radius: 24px;
+        border: 1px solid #e2e8f0;
+        overflow: hidden;
+        transition: box-shadow 0.2s;
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.02);
+      }
+
+      .pdf-card:hover {
+        box-shadow: 0 12px 24px -12px rgba(0, 0, 0, 0.12);
+      }
+
+      .card-header {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        padding: 16px 24px;
+        background: #fefefe;
+        border-bottom: 1px solid #edf2f7;
+        gap: 12px;
+      }
+
+      .file-info {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        flex-wrap: wrap;
+      }
+
+      .file-name {
+        font-weight: 700;
+        font-size: 1rem;
+        background: #f1f5f9;
+        padding: 4px 12px;
+        border-radius: 30px;
+        word-break: break-all;
+      }
+
+      .badge {
+        background: #e6f0ff;
+        color: #1e40af;
+        font-size: 0.7rem;
+        padding: 4px 10px;
+        border-radius: 40px;
+        font-weight: 500;
+      }
+
+      .card-actions {
+        display: flex;
+        gap: 10px;
+      }
+
+      .progress-area {
+        padding: 6px 24px 0 24px;
+      }
+
+      .progress-bar-bg {
+        background: #e2e8f0;
+        border-radius: 40px;
+        height: 6px;
+        width: 100%;
+        overflow: hidden;
+      }
+
+      .progress-fill {
+        background: #3b82f6;
+        width: 0%;
+        height: 100%;
+        transition: width 0.2s ease;
+      }
+
+      .status-text {
+        font-size: 0.7rem;
+        color: #475569;
+        margin-top: 6px;
+        margin-bottom: 8px;
+      }
+
+      .images-grid {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 16px;
+        padding: 20px 24px;
+        background: #fafcff;
+        border-top: 1px solid #ecf3fa;
+        max-height: 520px;
+        overflow-y: auto;
+      }
+
+      .image-card {
+        background: white;
+        border-radius: 16px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+        width: 160px;
+        transition: transform 0.1s;
+        border: 1px solid #eef2f6;
+        overflow: hidden;
+        flex-shrink: 0;
+      }
+
+      .image-card img {
+        width: 100%;
+        height: 200px;
+        object-fit: cover;
+        display: block;
+        background: #f1f5f9;
+        cursor: pointer;
+      }
+
+      .image-info {
+        padding: 8px 8px 10px;
+        text-align: center;
+        font-size: 0.7rem;
+        font-weight: 500;
+        background: white;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 6px;
+      }
+
+      .page-num {
+        background: #eef2ff;
+        padding: 2px 8px;
+        border-radius: 20px;
+        color: #1e293b;
+      }
+
+      .download-single {
+        background: none;
+        border: none;
+        cursor: pointer;
+        font-size: 1.1rem;
+        padding: 4px 6px;
+        border-radius: 30px;
+        transition: background 0.1s;
+      }
+
+      .download-single:hover {
+        background: #e2e8f0;
+      }
+
+      .empty-images {
+        padding: 20px;
+        text-align: center;
+        color: #64748b;
+        font-style: italic;
+        width: 100%;
+      }
+
+      /* 自定义 Toast 通知 */
+      .toast-notification {
+        position: fixed;
+        bottom: 30px;
+        left: 50%;
+        transform: translateX(-50%) translateY(20px);
+        background: #1e293b;
+        backdrop-filter: blur(8px);
+        background: rgba(30, 41, 59, 0.95);
+        color: white;
+        padding: 12px 24px;
+        border-radius: 60px;
+        font-size: 0.85rem;
+        font-weight: 500;
+        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
+        z-index: 9999;
+        opacity: 0;
+        transition:
+          opacity 0.2s,
+          transform 0.2s;
+        pointer-events: none;
+        white-space: nowrap;
+        max-width: 90vw;
+        white-space: normal;
+        text-align: center;
+        line-height: 1.4;
+      }
+      .toast-notification.show {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0);
+      }
+      .toast-notification.error {
+        background: rgba(185, 28, 28, 0.95);
+      }
+      .toast-notification.warning {
+        background: rgba(245, 158, 11, 0.95);
+      }
+      .toast-notification.success {
+        background: rgba(22, 163, 74, 0.95);
+      }
+
+      @media (max-width: 700px) {
+        body {
+          padding: 16px;
+        }
+        .card-header {
+          flex-direction: column;
+          align-items: flex-start;
+        }
+        .image-card {
+          width: 130px;
+        }
+        .image-card img {
+          height: 160px;
+        }
+        .toast-notification {
+          white-space: normal;
+          width: auto;
+          max-width: 85vw;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="header">
+        <div class="upload-area">
+          <div class="file-input-wrapper">
+            <label class="file-label">
+              📁 选择 PDF 文件 (多选)
+              <input type="file" id="pdfUpload" accept=".pdf" multiple />
+            </label>
+          </div>
+          <div class="action-buttons">
+            <div class="format-selector">
+              🖼️ 输出格式：
+              <select id="outputFormatSelect">
+                <option value="jpeg">JPEG (jpg)</option>
+                <option value="png">PNG (png)</option>
+              </select>
+            </div>
+            <button id="convertAllBtn" class="btn btn-primary">
+              ⚡ 全部开始转换
+            </button>
+            <button id="downloadAllZipBtn" class="btn btn-outline">
+              📦 下载全部图片 (ZIP)
+            </button>
+            <button id="clearAllBtn" class="btn btn-danger">🗑️ 清空所有</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="filesListContainer" class="files-grid">
+        <div
+          style="
+            text-align: center;
+            padding: 40px;
+            background: white;
+            border-radius: 28px;
+            color: #94a3b8;
+          "
+        >
+          📌 点击上方按钮，选择一个或多个 PDF 文件开始转换
+        </div>
+      </div>
+    </div>
+
+    <script>
+      // 配置 pdf.js worker
+      pdfjsLib.GlobalWorkerOptions.workerSrc =
+        "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js";
+
+      // ---------- 全局状态 ----------
+      let fileItems = []; // 存储每个文件对象及对应卡片DOM、转换结果数据
+      let nextId = 0;
+      let isConvertingAll = false;
+
+      // DOM 元素
+      const pdfUpload = document.getElementById("pdfUpload");
+      const convertAllBtn = document.getElementById("convertAllBtn");
+      const downloadAllZipBtn = document.getElementById("downloadAllZipBtn");
+      const clearAllBtn = document.getElementById("clearAllBtn");
+      const filesListContainer = document.getElementById("filesListContainer");
+      const outputFormatSelect = document.getElementById("outputFormatSelect");
+
+      // ---------- 自定义 Toast 提示 ----------
+      let toastTimeout = null;
+      function showMessage(message, type = "info") {
+        // 移除已存在的toast
+        const existingToast = document.querySelector(".toast-notification");
+        if (existingToast) existingToast.remove();
+        if (toastTimeout) clearTimeout(toastTimeout);
+
+        const toast = document.createElement("div");
+        toast.className = `toast-notification ${type}`;
+        toast.textContent = message;
+        document.body.appendChild(toast);
+        // 强制重绘后添加show类
+        setTimeout(() => toast.classList.add("show"), 10);
+        toastTimeout = setTimeout(() => {
+          if (toast) toast.classList.remove("show");
+          setTimeout(() => toast.remove(), 300);
+        }, 3000);
+      }
+
+      // 辅助函数: 清理文件名
+      function sanitizeFilename(name) {
+        return name.replace(/[\\/:*?"<>|]/g, "_").replace(/\s+/g, "_");
+      }
+
+      // 获取当前选中的格式 (jpeg 或 png)
+      function getOutputFormat() {
+        return outputFormatSelect.value; // 'jpeg' 或 'png'
+      }
+
+      // 获取文件扩展名
+      function getFileExtension(format) {
+        return format === "jpeg" ? "jpg" : "png";
+      }
+
+      // 将canvas根据格式转为dataURL
+      function canvasToDataURL(canvas, format) {
+        if (format === "jpeg") {
+          return canvas.toDataURL("image/jpeg", 0.85);
+        } else {
+          return canvas.toDataURL("image/png");
+        }
+      }
+
+      // 下载单张图片
+      function downloadImage(dataURL, filename) {
+        try {
+          const link = document.createElement("a");
+          link.download = filename;
+          link.href = dataURL;
+          link.click();
+        } catch (e) {
+          const blob = dataURLToBlob(dataURL);
+          saveAs(blob, filename);
+        }
+      }
+
+      function dataURLToBlob(dataURL) {
+        const arr = dataURL.split(",");
+        const mime = arr[0].match(/:(.*?);/)[1];
+        const bstr = atob(arr[1]);
+        let n = bstr.length;
+        const u8arr = new Uint8Array(n);
+        while (n--) {
+          u8arr[n] = bstr.charCodeAt(n);
+        }
+        return new Blob([u8arr], { type: mime });
+      }
+
+      // 将单个PDF的所有图片打包为zip（按文件夹）
+      async function downloadPdfAsZip(pagesData, pdfFileName, format) {
+        if (!pagesData || pagesData.length === 0) {
+          showMessage("没有转换后的图片，请先转换此PDF", "warning");
+          return;
+        }
+        const zip = new JSZip();
+        const folderName = sanitizeFilename(pdfFileName.replace(/\.pdf$/i, ""));
+        const folder = zip.folder(folderName);
+        const ext = getFileExtension(format);
+        for (let i = 0; i < pagesData.length; i++) {
+          const imgDataURL = pagesData[i].dataURL;
+          const blob = dataURLToBlob(imgDataURL);
+          const pageNum = pagesData[i].pageNum;
+          folder.file(`page_${pageNum}.${ext}`, blob, { binary: true });
+        }
+        const content = await zip.generateAsync({ type: "blob" });
+        saveAs(content, `${folderName}_images.zip`);
+        showMessage(`✅ ${pdfFileName} 图片包下载成功`, "success");
+      }
+
+      // 下载所有已转换的PDF图片（全局ZIP）
+      async function downloadAllConvertedZip() {
+        const convertedItems = fileItems.filter(
+          (item) =>
+            item.converted === true &&
+            item.pagesData &&
+            item.pagesData.length > 0,
+        );
+        if (convertedItems.length === 0) {
+          showMessage("没有已转换的PDF，请先转换至少一个文件", "warning");
+          return;
+        }
+        const masterZip = new JSZip();
+        const currentFormat = getOutputFormat();
+        const ext = getFileExtension(currentFormat);
+        for (const item of convertedItems) {
+          const folderName = sanitizeFilename(
+            item.file.name.replace(/\.pdf$/i, ""),
+          );
+          const folder = masterZip.folder(folderName);
+          for (let i = 0; i < item.pagesData.length; i++) {
+            const page = item.pagesData[i];
+            const blob = dataURLToBlob(page.dataURL);
+            folder.file(`page_${page.pageNum}.${ext}`, blob, { binary: true });
+          }
+        }
+        const content = await masterZip.generateAsync({ type: "blob" });
+        saveAs(content, `all_pdfs_images_${ext}.zip`);
+        showMessage(
+          `全部图片打包完成，共 ${convertedItems.length} 个PDF`,
+          "success",
+        );
+      }
+
+      // 更新单个卡片进度
+      function updateCardProgress(item, current, total, statusMsg) {
+        if (!item.progressFillElem) return;
+        const percent = total > 0 ? (current / total) * 100 : 0;
+        item.progressFillElem.style.width = `${percent}%`;
+        if (item.statusTextElem) {
+          item.statusTextElem.innerText =
+            statusMsg || `转换中: ${current}/${total} 页`;
+        }
+        if (current === total && total > 0) {
+          if (item.statusTextElem)
+            item.statusTextElem.innerText = `✅ 转换完成 (${total}页)`;
+        }
+      }
+
+      // 核心转换函数：根据当前选中的格式转换单个PDF
+      async function convertSinglePdf(fileItem) {
+        const file = fileItem.file;
+        const imagesContainer = fileItem.imagesContainer;
+        const downloadPdfBtn = fileItem.downloadPdfBtn;
+        if (imagesContainer) imagesContainer.innerHTML = "";
+        if (fileItem.isConverting) {
+          showMessage("该文件正在转换中，请稍后", "warning");
+          return null;
+        }
+        fileItem.isConverting = true;
+        fileItem.converted = false;
+        if (downloadPdfBtn) downloadPdfBtn.disabled = true;
+        updateCardProgress(fileItem, 0, 1, "加载PDF中...");
+
+        try {
+          const arrayBuffer = await file.arrayBuffer();
+          const pdf = await pdfjsLib.getDocument({
+            data: arrayBuffer,
+            useSystemFonts: true,
+          }).promise;
+          const totalPages = pdf.numPages;
+          fileItem.totalPages = totalPages;
+          const pagesData = [];
+          const currentFormat = getOutputFormat(); // 获取当前格式
+
+          updateCardProgress(
+            fileItem,
+            0,
+            totalPages,
+            `准备转换 0/${totalPages}`,
+          );
+
+          for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
+            const page = await pdf.getPage(pageNum);
+            const viewport = page.getViewport({ scale: 1.5 });
+            const targetWidth = 900;
+            const scale = targetWidth / viewport.width;
+            const scaledViewport = page.getViewport({ scale: scale });
+            const canvas = document.createElement("canvas");
+            const context = canvas.getContext("2d");
+            canvas.width = scaledViewport.width;
+            canvas.height = scaledViewport.height;
+            const renderContext = {
+              canvasContext: context,
+              viewport: scaledViewport,
+            };
+            await page.render(renderContext).promise;
+            // 根据用户选择的格式生成 dataURL
+            const dataURL = canvasToDataURL(canvas, currentFormat);
+            pagesData.push({
+              pageNum: pageNum,
+              dataURL: dataURL,
+            });
+
+            // 实时添加缩略图
+            const imageCard = document.createElement("div");
+            imageCard.className = "image-card";
+            const img = document.createElement("img");
+            img.src = dataURL;
+            img.title = `第${pageNum}页 (${currentFormat.toUpperCase()})`;
+            img.addEventListener("click", () => {
+              window.open(dataURL, "_blank");
+            });
+            const infoDiv = document.createElement("div");
+            infoDiv.className = "image-info";
+            infoDiv.innerHTML = `<span class="page-num">📄 第${pageNum}页</span>
+                                     <button class="download-single" title="下载此页">⬇️</button>`;
+            const downBtn = infoDiv.querySelector(".download-single");
+            downBtn.addEventListener("click", (e) => {
+              e.stopPropagation();
+              const ext = getFileExtension(currentFormat);
+              const filename = `${sanitizeFilename(file.name.replace(/\.pdf$/i, ""))}_page_${pageNum}.${ext}`;
+              downloadImage(dataURL, filename);
+            });
+            imageCard.appendChild(img);
+            imageCard.appendChild(infoDiv);
+            imagesContainer.appendChild(imageCard);
+
+            updateCardProgress(
+              fileItem,
+              pageNum,
+              totalPages,
+              `转换中: ${pageNum}/${totalPages} (${currentFormat.toUpperCase()})`,
+            );
+            await new Promise((r) => setTimeout(r, 20));
+          }
+
+          fileItem.pagesData = pagesData;
+          fileItem.converted = true;
+          fileItem.isConverting = false;
+          updateCardProgress(
+            fileItem,
+            totalPages,
+            totalPages,
+            `✅ 完成 (${totalPages}页, ${currentFormat.toUpperCase()})`,
+          );
+          if (downloadPdfBtn) {
+            downloadPdfBtn.disabled = false;
+            // 重新绑定下载事件（确保使用当前格式打包）
+            const newBtn = downloadPdfBtn.cloneNode(true);
+            downloadPdfBtn.parentNode.replaceChild(newBtn, downloadPdfBtn);
+            fileItem.downloadPdfBtn = newBtn;
+            newBtn.addEventListener("click", async (e) => {
+              e.stopPropagation();
+              if (fileItem.pagesData && fileItem.pagesData.length) {
+                await downloadPdfAsZip(
+                  fileItem.pagesData,
+                  fileItem.file.name,
+                  currentFormat,
+                );
+              } else {
+                showMessage("暂无图片数据，请先转换", "warning");
+              }
+            });
+          }
+          await pdf.destroy();
+          showMessage(
+            `✅ ${file.name} 转换完成，共 ${totalPages} 页`,
+            "success",
+          );
+          return pagesData;
+        } catch (error) {
+          console.error(error);
+          updateCardProgress(
+            fileItem,
+            0,
+            1,
+            `❌ 转换失败: ${error.message || "文件格式问题"}`,
+          );
+          fileItem.isConverting = false;
+          if (imagesContainer)
+            imagesContainer.innerHTML = `<div class="empty-images">⚠️ 转换出错，请检查PDF是否有效</div>`;
+          showMessage(
+            `❌ ${file.name} 转换失败: ${error.message || "未知错误"}`,
+            "error",
+          );
+          return null;
+        }
+      }
+
+      // 创建文件卡片
+      function createFileCard(file) {
+        const cardId = `pdf_card_${nextId}`;
+        const card = document.createElement("div");
+        card.className = "pdf-card";
+        card.id = cardId;
+
+        const headerDiv = document.createElement("div");
+        headerDiv.className = "card-header";
+        headerDiv.innerHTML = `
+            <div class="file-info">
+                <span class="file-name">📄 ${escapeHtml(file.name)}</span>
+                <span class="badge">待转换</span>
+            </div>
+            <div class="card-actions">
+                <button class="btn btn-outline convert-single-btn" style="padding:6px 16px;">▶️ 转换此PDF</button>
+                <button class="btn btn-outline download-pdf-zip-btn" disabled style="padding:6px 16px;">📥 打包下载本PDF</button>
+            </div>
+        `;
+        const progressArea = document.createElement("div");
+        progressArea.className = "progress-area";
+        progressArea.innerHTML = `
+            <div class="progress-bar-bg"><div class="progress-fill" style="width:0%"></div></div>
+            <div class="status-text">⚡ 未开始</div>
+        `;
+        const imagesContainer = document.createElement("div");
+        imagesContainer.className = "images-grid";
+        imagesContainer.innerHTML =
+          '<div class="empty-images">✨ 点击「转换此PDF」或「全部开始转换」生成图片预览</div>';
+
+        card.appendChild(headerDiv);
+        card.appendChild(progressArea);
+        card.appendChild(imagesContainer);
+
+        const convertSingleBtn = headerDiv.querySelector(".convert-single-btn");
+        const downloadPdfBtn = headerDiv.querySelector(".download-pdf-zip-btn");
+        const progressFillElem = progressArea.querySelector(".progress-fill");
+        const statusTextElem = progressArea.querySelector(".status-text");
+
+        const item = {
+          id: nextId,
+          file: file,
+          cardElement: card,
+          imagesContainer: imagesContainer,
+          downloadPdfBtn: downloadPdfBtn,
+          progressFillElem: progressFillElem,
+          statusTextElem: statusTextElem,
+          converted: false,
+          pagesData: null,
+          totalPages: 0,
+          isConverting: false,
+        };
+
+        convertSingleBtn.addEventListener("click", async (e) => {
+          e.stopPropagation();
+          if (isConvertingAll) {
+            showMessage("全局批量转换进行中，请稍后单独操作", "warning");
+            return;
+          }
+          if (item.isConverting) {
+            showMessage("正在转换中，请稍后", "warning");
+            return;
+          }
+          await convertSinglePdf(item);
+        });
+
+        nextId++;
+        fileItems.push(item);
+        filesListContainer.appendChild(card);
+        // 移除空状态占位符
+        if (
+          fileItems.length === 1 &&
+          filesListContainer.children.length === 1 &&
+          filesListContainer.children[0].innerText?.includes("暂无PDF")
+        ) {
+          filesListContainer.innerHTML = "";
+          filesListContainer.appendChild(card);
+        }
+        return item;
+      }
+
+      function escapeHtml(str) {
+        return str.replace(/[&<>]/g, function (m) {
+          if (m === "&") return "&amp;";
+          if (m === "<") return "&lt;";
+          if (m === ">") return "&gt;";
+          return m;
+        });
+      }
+
+      // 批量顺序转换所有PDF
+      async function convertAllFilesSequentially() {
+        if (isConvertingAll) {
+          showMessage("已有批量转换任务进行中，请稍后", "warning");
+          return;
+        }
+        if (fileItems.length === 0) {
+          showMessage("没有上传任何PDF文件，请先选择文件", "warning");
+          return;
+        }
+        isConvertingAll = true;
+        convertAllBtn.disabled = true;
+        try {
+          for (let i = 0; i < fileItems.length; i++) {
+            const item = fileItems[i];
+            if (item.isConverting) continue;
+            await convertSinglePdf(item);
+            await new Promise((r) => setTimeout(r, 80));
+          }
+          showMessage(
+            `🎉 所有PDF转换完成！共 ${fileItems.length} 个文件`,
+            "success",
+          );
+        } catch (err) {
+          console.error(err);
+          showMessage(`批量转换出错: ${err.message}`, "error");
+        } finally {
+          isConvertingAll = false;
+          convertAllBtn.disabled = false;
+        }
+      }
+
+      // 处理上传新文件
+      function handleFilesUpload(files) {
+        if (!files.length) return;
+        let addedCount = 0;
+        for (let i = 0; i < files.length; i++) {
+          const file = files[i];
+          if (
+            file.type !== "application/pdf" &&
+            !file.name.toLowerCase().endsWith(".pdf")
+          ) {
+            showMessage(`文件 "${file.name}" 不是PDF格式，已跳过`, "warning");
+            continue;
+          }
+          const exists = fileItems.some(
+            (item) =>
+              item.file.name === file.name && item.file.size === file.size,
+          );
+          if (exists) {
+            showMessage(
+              `文件 "${file.name}" 已经存在列表中，跳过重复添加`,
+              "warning",
+            );
+            continue;
+          }
+          createFileCard(file);
+          addedCount++;
+        }
+        if (addedCount > 0) {
+          showMessage(`成功添加 ${addedCount} 个PDF文件`, "success");
+          const lastCard = fileItems[fileItems.length - 1]?.cardElement;
+          if (lastCard)
+            lastCard.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        } else if (files.length > 0 && addedCount === 0) {
+          showMessage("没有添加任何有效PDF文件", "warning");
+        }
+      }
+
+      // 清空所有文件
+      function clearAllFiles() {
+        if (isConvertingAll) {
+          showMessage("正在批量转换中，无法清空，请稍后", "warning");
+          return;
+        }
+        for (const item of fileItems) {
+          if (item.cardElement) item.cardElement.remove();
+        }
+        fileItems = [];
+        filesListContainer.innerHTML = `<div style="text-align: center; padding: 40px; background: white; border-radius: 28px; color: #94a3b8;">
+                                            📌 暂无PDF文件，点击上方按钮上传
+                                        </div>`;
+        showMessage("已清空所有文件", "info");
+      }
+
+      // 事件绑定
+      pdfUpload.addEventListener("change", (e) => {
+        const files = Array.from(e.target.files);
+        handleFilesUpload(files);
+        pdfUpload.value = "";
+      });
+
+      convertAllBtn.addEventListener("click", convertAllFilesSequentially);
+      downloadAllZipBtn.addEventListener("click", async () => {
+        if (isConvertingAll) {
+          showMessage("请等待转换完成后再下载全部图片", "warning");
+          return;
+        }
+        await downloadAllConvertedZip();
+      });
+      clearAllBtn.addEventListener("click", clearAllFiles);
+
+      // 初始空状态
+      filesListContainer.innerHTML = `<div style="text-align: center; padding: 40px; background: white; border-radius: 28px; color: #94a3b8;">
+                                        📌 点击上方按钮，选择一个或多个 PDF 文件开始转换
+                                    </div>`;
+    </script>
+  </body>
+</html>
