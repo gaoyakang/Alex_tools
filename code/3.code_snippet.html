@@ -1,0 +1,724 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>代码片段库</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          "Helvetica Neue", Arial, sans-serif;
+        background: linear-gradient(
+          135deg,
+          #1a1a2e 0%,
+          #16213e 50%,
+          #0f3460 100%
+        );
+        min-height: 100vh;
+        color: #e8e8e8;
+        padding: 40px 20px;
+      }
+
+      .container {
+        max-width: 900px;
+        margin: 0 auto;
+      }
+
+      h1 {
+        text-align: center;
+        font-size: 2.5rem;
+        margin-bottom: 40px;
+        background: linear-gradient(90deg, #00d4ff, #7b2cbf);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+      }
+
+      .category {
+        margin-bottom: 30px;
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 16px;
+        overflow: hidden;
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+      }
+
+      .category-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 20px 25px;
+        cursor: pointer;
+        background: rgba(255, 255, 255, 0.08);
+        transition: all 0.3s ease;
+        user-select: none;
+      }
+
+      .category-header:hover {
+        background: rgba(255, 255, 255, 0.12);
+      }
+
+      .category-title {
+        font-size: 1.3rem;
+        font-weight: 600;
+        color: #00d4ff;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+
+      .category-count {
+        font-size: 0.85rem;
+        color: #888;
+        background: rgba(0, 212, 255, 0.15);
+        padding: 4px 12px;
+        border-radius: 20px;
+      }
+
+      .toggle-icon {
+        width: 24px;
+        height: 24px;
+        transition: transform 0.3s ease;
+        color: #00d4ff;
+      }
+
+      .category.collapsed .toggle-icon {
+        transform: rotate(-90deg);
+      }
+
+      .snippets-container {
+        max-height: 0;
+        overflow: hidden;
+        transition: max-height 0.4s ease-out;
+      }
+
+      .category:not(.collapsed) .snippets-container {
+        max-height: 10000px;
+      }
+
+      .snippet-item {
+        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+      }
+
+      .snippet-item:last-child {
+        border-bottom: none;
+      }
+
+      .snippet-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 15px 25px;
+        cursor: pointer;
+        transition: background 0.2s ease;
+      }
+
+      .snippet-header:hover {
+        background: rgba(255, 255, 255, 0.03);
+      }
+
+      .snippet-name {
+        font-size: 1rem;
+        color: #e8e8e8;
+        font-weight: 500;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .snippet-name::before {
+        content: "⌘";
+        color: #7b2cbf;
+        font-size: 0.9rem;
+      }
+
+      .snippet-arrow {
+        width: 18px;
+        height: 18px;
+        transition: transform 0.3s ease;
+        color: #666;
+      }
+
+      .snippet-item.expanded .snippet-arrow {
+        transform: rotate(180deg);
+        color: #00d4ff;
+      }
+
+      .snippet-content {
+        max-height: 0;
+        overflow: hidden;
+        transition: max-height 0.4s ease-out;
+        background: rgba(0, 0, 0, 0.3);
+      }
+
+      .snippet-item.expanded .snippet-content {
+        max-height: 2000px; /* 增加最大高度 */
+      }
+
+      .code-wrapper {
+        position: relative;
+        padding: 20px 25px;
+      }
+
+      pre {
+        background: #0d1117;
+        border-radius: 10px;
+        padding: 20px;
+        overflow-x: auto;
+        overflow-y: auto; /* 添加垂直滚动 */
+        max-height: 600px; /* 限制最大高度 */
+        font-family: "Fira Code", "Consolas", "Monaco", monospace;
+        font-size: 0.9rem;
+        line-height: 1.6;
+        color: #c9d1d9;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+      }
+
+      /* 自定义滚动条样式 */
+      pre::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+      }
+
+      pre::-webkit-scrollbar-track {
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 4px;
+      }
+
+      pre::-webkit-scrollbar-thumb {
+        background: rgba(0, 212, 255, 0.3);
+        border-radius: 4px;
+      }
+
+      pre::-webkit-scrollbar-thumb:hover {
+        background: rgba(0, 212, 255, 0.5);
+      }
+
+      code {
+        font-family: inherit;
+      }
+
+      .copy-btn {
+        position: absolute;
+        top: 30px;
+        right: 35px;
+        background: linear-gradient(135deg, #00d4ff, #7b2cbf);
+        border: none;
+        color: white;
+        padding: 8px 16px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 0.85rem;
+        font-weight: 500;
+        transition: all 0.2s ease;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        z-index: 10;
+      }
+
+      .copy-btn:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 5px 20px rgba(0, 212, 255, 0.4);
+      }
+
+      .copy-btn:active {
+        transform: translateY(0);
+      }
+
+      .copy-btn.copied {
+        background: linear-gradient(135deg, #28a745, #20c997);
+      }
+
+      .back-to-top {
+        position: fixed;
+        bottom: 30px;
+        right: 30px;
+        width: 50px;
+        height: 50px;
+        background: linear-gradient(135deg, #00d4ff, #7b2cbf);
+        border: none;
+        border-radius: 50%;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        opacity: 0;
+        visibility: hidden;
+        transition: all 0.3s ease;
+        box-shadow: 0 5px 20px rgba(0, 212, 255, 0.3);
+        z-index: 1000;
+      }
+
+      .back-to-top.visible {
+        opacity: 1;
+        visibility: visible;
+      }
+
+      .back-to-top:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 10px 30px rgba(0, 212, 255, 0.5);
+      }
+
+      .back-to-top svg {
+        width: 24px;
+        height: 24px;
+        color: white;
+      }
+
+      @media (max-width: 600px) {
+        h1 {
+          font-size: 1.8rem;
+        }
+        .category-header {
+          padding: 15px 20px;
+        }
+        .snippet-header {
+          padding: 12px 20px;
+        }
+        .code-wrapper {
+          padding: 15px 20px;
+        }
+        pre {
+          padding: 15px;
+          font-size: 0.8rem;
+          max-height: 400px;
+        }
+        .copy-btn {
+          top: 25px;
+          right: 30px;
+          padding: 6px 12px;
+          font-size: 0.8rem;
+        }
+      }
+    </style>
+    <base target="_blank" />
+  </head>
+  <body>
+    <div class="container">
+      <div id="app"></div>
+    </div>
+
+    <button class="back-to-top" onclick="scrollToTop()">
+      <svg
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+      >
+        <path d="M18 15l-6-6-6 6" />
+      </svg>
+    </button>
+
+    <script>
+      // ==================== 配置区域 ====================
+      // 在这里添加/修改你的代码片段配置
+      const snippetsConfig = [
+        {
+          category: "JavaScript",
+          items: [
+            {
+              name: "自动翻页爬取数据",
+              code: `/**
+ * 高级翻页抓取器 - 声明式配置
+ * 只需要提供选择器和属性，自动完成全量数据抓取
+ */
+class PaginationScraper {
+    /**
+     * @param {Object} config 配置对象
+     * @param {string|Object} config.items 数据项配置
+     *   - 如果为字符串：表示每个数据项的选择器，默认取元素的文本内容
+     *   - 如果为对象：{ selector, attribute, subSelector }
+     *        selector: 每个数据项的选择器（必需）
+     *        attribute: 要获取的属性名（如 'src', 'href'），不提供则取 innerText
+     *        subSelector: 在数据项内进一步选择子元素的选择器（可选）
+     * @param {number|string|Object} config.totalPages 总页数配置
+     *   - 如果为数字：直接使用
+     *   - 如果为字符串：选择器，取匹配元素的文本内容并转为整数
+     *   - 如果为对象：{ selector, index, attribute }
+     *        selector: 选择器（必需）
+     *        index: 匹配元素中的索引（默认 -1 表示最后一个）
+     *        attribute: 取属性值（可选，不提供则取文本）
+     * @param {string|Object} config.nextButton 下一页按钮配置
+     *   - 如果为字符串：选择器，默认取第一个匹配元素
+     *   - 如果为对象：{ selector, index }
+     *        selector: 选择器（必需）
+     *        index: 匹配元素中的索引（默认 0）
+     * @param {number} [config.waitMs=1000] 翻页后等待时间（毫秒）
+     * @param {Function} [config.onPageCollected] 每页收集完的回调
+     * @param {Function} [config.onComplete] 全部完成后的回调
+     * @returns {Promise<Array>} 收集到的所有数据
+     */
+    constructor(config) {
+        this.itemsConfig = config.items;
+        this.totalPagesConfig = config.totalPages;
+        this.nextButtonConfig = config.nextButton;
+        this.waitMs = config.waitMs || 1000;
+        this.onPageCollected = config.onPageCollected || (() => {});
+        this.onComplete = config.onComplete || (() => {});
+
+        // 构建 collector 和 getTotalPages 函数
+        this.collector = this._buildCollector();
+        this.getTotalPages = this._buildGetTotalPages();
+        this.nextButtonGetter = this._buildNextButtonGetter();
+    }
+
+    // 构建收集当前页数据的函数
+    _buildCollector() {
+        const cfg = this.itemsConfig;
+        let selector, attribute, subSelector;
+
+        if (typeof cfg === 'string') {
+            selector = cfg;
+            attribute = null;
+            subSelector = null;
+        } else {
+            selector = cfg.selector;
+            attribute = cfg.attribute || null;
+            subSelector = cfg.subSelector || null;
+        }
+
+        if (!selector) throw new Error('items.selector 是必需的');
+
+        return () => {
+            const items = document.querySelectorAll(selector);
+            const results = [];
+
+            for (let i = 0; i < items.length; i++) {
+                let targetEl = items[i];
+                if (subSelector) {
+                    const sub = targetEl.querySelector(subSelector);
+                    if (!sub) continue;
+                    targetEl = sub;
+                }
+
+                let value;
+                if (attribute) {
+                    value = targetEl.getAttribute(attribute);
+                } else {
+                    value = targetEl.innerText || targetEl.textContent;
+                }
+                if (value !== null && value !== undefined) {
+                    results.push(value);
+                }
+            }
+            return results;
+        };
+    }
+
+    // 构建获取总页数的函数
+    _buildGetTotalPages() {
+        const cfg = this.totalPagesConfig;
+        if (typeof cfg === 'number') {
+            return () => cfg;
+        }
+        if (typeof cfg === 'string') {
+            // 简单选择器，取匹配元素的文本内容
+            return () => {
+                const el = document.querySelector(cfg);
+                if (!el) return 1;
+                const text = el.innerText || el.textContent;
+                return parseInt(text, 10) || 1;
+            };
+        }
+        if (cfg && typeof cfg === 'object') {
+            const { selector, index = -1, attribute } = cfg;
+            return () => {
+                const els = document.querySelectorAll(selector);
+                if (!els.length) return 1;
+                const target = index >= 0 ? els[index] : els[els.length - 1];
+                let raw;
+                if (attribute) {
+                    raw = target.getAttribute(attribute);
+                } else {
+                    raw = target.innerText || target.textContent;
+                }
+                return parseInt(raw, 10) || 1;
+            };
+        }
+        throw new Error('totalPages 配置无效');
+    }
+
+    // 构建下一页按钮获取函数
+    _buildNextButtonGetter() {
+        const cfg = this.nextButtonConfig;
+        if (!cfg) {
+            return () => null;
+        }
+        if (typeof cfg === 'string') {
+            return () => document.querySelector(cfg);
+        }
+        if (cfg && typeof cfg === 'object') {
+            const { selector, index = 0 } = cfg;
+            return () => {
+                const btns = document.querySelectorAll(selector);
+                return btns[index] || null;
+            };
+        }
+        throw new Error('nextButton 配置无效');
+    }
+
+    // 启动抓取（复用之前的 PaginationCollector）
+    async start() {
+        // 动态导入或复用 PaginationCollector（假设已定义在全局）
+        if (typeof PaginationCollector === 'undefined') {
+            throw new Error('需要先定义 PaginationCollector 类');
+        }
+        const collector = new PaginationCollector({
+            collector: this.collector,
+            getTotalPages: this.getTotalPages,
+            nextButton: this.nextButtonGetter,
+            waitMs: this.waitMs,
+            onPageCollected: this.onPageCollected,
+            onComplete: this.onComplete
+        });
+        return await collector.start();
+    }
+}
+/**
+ * 通用翻页数据收集器
+ * @param {Object} config 配置对象
+ * @param {Function} config.collector 收集当前页数据的函数，返回一个数组（例如图片链接数组）
+ * @param {Function|number} config.getTotalPages 获取总页数的函数，或者直接传入总页数（数字）
+ * @param {Function|string} config.nextButton 下一页按钮的获取方式：可以是选择器字符串，也可以是返回按钮DOM元素的函数
+ * @param {number} [config.waitMs=1000] 点击下一页后等待的毫秒数
+ * @param {boolean} [config.autoStart=true] 是否自动开始收集
+ * @param {Function} [config.onPageCollected] 每收集完一页后的回调，参数：(currentPage, currentData)
+ * @param {Function} [config.onComplete] 全部收集完成后的回调，参数：(allData)
+ * @returns {Promise<Array>} 返回收集到的所有数据的数组
+ */
+class PaginationCollector {
+    constructor(config) {
+        this.collector = config.collector;
+        this.getTotalPages = config.getTotalPages;
+        this.nextButton = config.nextButton;
+        this.waitMs = config.waitMs || 1000;
+        this.onPageCollected = config.onPageCollected || (() => {});
+        this.onComplete = config.onComplete || (() => {});
+
+        this.allData = [];
+        this.currentPage = 1;
+        this.totalPages = null;
+    }
+
+    // 获取下一页按钮元素
+    _getNextButton() {
+        if (typeof this.nextButton === 'function') {
+            return this.nextButton();
+        }
+        if (typeof this.nextButton === 'string') {
+            return document.querySelector(this.nextButton);
+        }
+        return this.nextButton; // 假设直接传入了DOM元素
+    }
+
+    // 点击下一页
+    async _clickNext() {
+        const btn = this._getNextButton();
+        if (!btn) {
+            console.warn('未找到下一页按钮');
+            return false;
+        }
+        btn.click();
+        await this._wait(this.waitMs);
+        return true;
+    }
+
+    _wait(ms) {
+        return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+    // 收集当前页数据
+    _collectCurrentPage() {
+        const pageData = this.collector();
+        if (Array.isArray(pageData)) {
+            this.allData.push(...pageData);
+        } else {
+            console.warn('收集器未返回数组，已忽略');
+        }
+        this.onPageCollected(this.currentPage, this.allData);
+        console.log(\`第 \${this.currentPage} 页收集完成，当前总数: \${this.allData.length}\`);
+    }
+
+    // 解析总页数
+    async _resolveTotalPages() {
+        if (typeof this.getTotalPages === 'function') {
+            const pages = await this.getTotalPages();
+            this.totalPages = Number(pages);
+        } else if (typeof this.getTotalPages === 'number') {
+            this.totalPages = this.getTotalPages;
+        } else {
+            throw new Error('getTotalPages 必须是一个函数或数字');
+        }
+        if (isNaN(this.totalPages) || this.totalPages < 1) {
+            throw new Error('无效的总页数');
+        }
+        console.log(\`总页数: \${this.totalPages}\`);
+    }
+
+    // 开始收集
+    async start() {
+        await this._resolveTotalPages();
+
+        // 收集第一页
+        this._collectCurrentPage();
+
+        // 逐页翻页收集
+        while (this.currentPage < this.totalPages) {
+            const clicked = await this._clickNext();
+            if (!clicked) {
+                console.warn('无法继续翻页，提前结束');
+                break;
+            }
+            this.currentPage++;
+            this._collectCurrentPage();
+        }
+
+        console.log(\`全部收集完成，总数据量: \${this.allData.length}\`);
+        this.onComplete(this.allData);
+        return this.allData;
+    }
+}
+
+
+const scraper2 = new PaginationScraper({
+  // 要爬取的元素的定位和属性
+    items: { selector: "audio", attribute: "src" },
+  // 翻页数量的获取
+    totalPages: ".el-pager:nth-child(2) > :last-child",
+  // 下一步按钮的选择器
+    nextButton: { selector: ".btn-next", index: 1 },
+  // 翻页间隔时间
+    waitMs: 5000,
+  // 完成后执行的操作
+    onComplete: (allData) => { console.log("完成", allData);  }
+});
+
+scraper2.start();`,
+            },
+          ],
+        },
+      ];
+      // ==================== 配置结束 ====================
+
+      function renderApp() {
+        const app = document.getElementById("app");
+
+        const html = snippetsConfig
+          .map((cat, catIndex) => {
+            const snippetsHtml = cat.items
+              .map(
+                (item, itemIndex) => `
+                    <div class="snippet-item" data-cat="${catIndex}" data-item="${itemIndex}">
+                        <div class="snippet-header" onclick="toggleSnippet(this)">
+                            <span class="snippet-name">${escapeHtml(item.name)}</span>
+                            <svg class="snippet-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M6 9l6 6 6-6"/>
+                            </svg>
+                        </div>
+                        <div class="snippet-content">
+                            <div class="code-wrapper">
+                                <button class="copy-btn" onclick="copyCode(this, event)">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                                    </svg>
+                                    复制
+                                </button>
+                                <pre><code>${escapeHtml(item.code)}</code></pre>
+                            </div>
+                        </div>
+                    </div>
+                `,
+              )
+              .join("");
+
+            return `
+                    <div class="category collapsed" data-cat="${catIndex}">
+                        <div class="category-header" onclick="toggleCategory(this)">
+                            <div class="category-title">
+                                <span>${escapeHtml(cat.category)}</span>
+                                <span class="category-count">${cat.items.length} 个片段</span>
+                            </div>
+                            <svg class="toggle-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M6 9l6 6 6-6"/>
+                            </svg>
+                        </div>
+                        <div class="snippets-container">
+                            ${snippetsHtml}
+                        </div>
+                    </div>
+                `;
+          })
+          .join("");
+
+        app.innerHTML = html;
+      }
+
+      function escapeHtml(text) {
+        const div = document.createElement("div");
+        div.textContent = text;
+        return div.innerHTML;
+      }
+
+      function toggleCategory(header) {
+        const category = header.parentElement;
+        category.classList.toggle("collapsed");
+      }
+
+      function toggleSnippet(header) {
+        const item = header.parentElement;
+        item.classList.toggle("expanded");
+      }
+
+      async function copyCode(btn, event) {
+        event.stopPropagation();
+        const code = btn.nextElementSibling.querySelector("code").innerText;
+
+        try {
+          await navigator.clipboard.writeText(code);
+          const originalText = btn.innerHTML;
+          btn.classList.add("copied");
+          btn.innerHTML = `
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M20 6L9 17l-5-5"/>
+                    </svg>
+                    已复制
+                `;
+
+          setTimeout(() => {
+            btn.classList.remove("copied");
+            btn.innerHTML = originalText;
+          }, 2000);
+        } catch (err) {
+          console.error("复制失败:", err);
+        }
+      }
+
+      function scrollToTop() {
+        window.scrollTo({
+          top: 0,
+          behavior: "smooth",
+        });
+      }
+
+      const backToTopBtn = document.querySelector(".back-to-top");
+      window.addEventListener("scroll", () => {
+        if (window.scrollY > 300) {
+          backToTopBtn.classList.add("visible");
+        } else {
+          backToTopBtn.classList.remove("visible");
+        }
+      });
+
+      renderApp();
+    </script>
+  </body>
+</html>
